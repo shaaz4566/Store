@@ -46,3 +46,12 @@ The admin form currently accepts image URLs. For production, replace that field 
 
 ## Important
 Firestore rules must be configured before public launch. Do not leave Firestore in unrestricted test mode.
+
+
+## Admin access
+`admin.html` starts as a sign-in screen and does not load or display the dashboard until Google Authentication succeeds and the signed-in UID matches the administrator UID configured in `admin.js` and `firestore.rules`.
+
+Current administrator UID:
+`ihSDHUk86DY8McVcLN7gjzt96Bm1`
+
+For production, keep Firestore Rules as the final authorization boundary.
