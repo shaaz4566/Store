@@ -2,42 +2,46 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SZC Admin</title>
-<link rel="stylesheet" href="admin.css?v=20260826-3">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SZC Store Admin</title>
+<link rel="stylesheet" href="admin.css?v=20260826-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap">
 </head>
 <body>
-<header>
+<header class="topbar">
   <a href="index.html" class="brand">SZC</a>
-  <span>Store Admin</span>
-  <button id="adminLogin">Sign in with Google</button>
+  <div class="top-title"><strong>Store Admin</strong><span>Control centre</span></div>
+  <div class="top-actions"><a href="index.html" target="_blank" class="top-link">View store ↗</a><button id="adminLogin" class="top-login">Sign in with Google</button></div>
 </header>
 
-<!-- This is the ONLY content visible before administrator verification. -->
 <section id="authGate" class="auth-gate">
   <div class="login-card">
     <div class="admin-mark">SZC</div>
     <p class="eyebrow">PRIVATE ADMIN AREA</p>
-    <h1 class="title">Sign in to continue.</h1>
-    <p class="muted">Use the authorized Google account to access the store dashboard.</p>
-    <button class="primary login-large" id="pageLogin">Continue with Google ↗</button>
-    <p class="security-note">Administrator access is checked using your Firebase Authentication UID.</p>
+    <h1>Sign in to continue.</h1>
+    <p>Only the authorized SZC administrator can open the store management tools.</p>
+    <button id="pageLogin" class="primary big">Continue with Google ↗</button>
   </div>
 </section>
 
 <main id="adminApp" hidden>
-  <aside id="adminSidebar">
-    <button class="tab active" data-tab="dashboard">Overview</button>
-    <button class="tab" data-tab="products">Products</button>
-    <button class="tab" data-tab="orders">Orders & Shipping</button>
-    <button class="tab" data-tab="customers">Customers</button>
-    <button class="tab" data-tab="settings">Payment Options</button>
+  <aside class="sidebar">
+    <div class="side-heading">STORE MANAGEMENT</div>
+    <button class="nav-item active" data-tab="dashboard"><span>⌂</span>Overview</button>
+    <button class="nav-item" data-tab="products"><span>▦</span>Products <b id="navProductCount">0</b></button>
+    <button class="nav-item" data-tab="orders"><span>◫</span>Orders <b id="navOrderCount">0</b></button>
+    <button class="nav-item" data-tab="customers"><span>♙</span>Customers</button>
+    <button class="nav-item" data-tab="settings"><span>⚙</span>Payment & Store</button>
+    <div class="sidebar-bottom"><button id="sidebarStore" class="outline">Open customer store ↗</button></div>
   </aside>
-  <section class="content"><div id="view"></div></section>
+  <section class="workspace">
+    <div id="view"></div>
+  </section>
 </main>
 
-<div id="toast"></div>
-<script type="module" src="admin.js?v=20260826-3"></script>
+<div id="modal" class="modal" hidden><div class="modal-backdrop" data-close-modal></div><div id="modalBody" class="modal-card"></div></div>
+<div id="toast" class="toast"></div>
+<script type="module" src="admin.js?v=20260826-8"></script>
 </body>
 </html>
