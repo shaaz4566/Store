@@ -61,12 +61,7 @@ const toast=(m)=>{const t=$("#toast");t.textContent=m;t.classList.add("show");se
 let storeSettings={upiEnabled:true,gpayEnabled:true,cardEnabled:false,upiId:""};
 let products=[], cart=JSON.parse(localStorage.getItem("szc_cart")||"[]"), wishlist=JSON.parse(localStorage.getItem("szc_wishlist")||"[]"), currentUser=null;
 
-const fallback=[
-{id:"sample1",name:"Everyday Overshirt",category:"Fashion",price:1499,image:"https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=900&q=80",badge:"NEW",description:"A relaxed everyday layer with a clean, modern silhouette.",featured:true},
-{id:"sample2",name:"Studio Tote",category:"Accessories",price:899,image:"https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=900&q=80",badge:"BEST",description:"A spacious carry-all for everyday movement.",featured:true},
-{id:"sample3",name:"Minimal Runner",category:"Footwear",price:2299,image:"https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80",badge:"NEW",description:"An understated everyday sneaker.",featured:false},
-{id:"sample4",name:"Object No. 04",category:"Lifestyle",price:699,image:"https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80",badge:"",description:"A considered object for your everyday setup.",featured:true}
-];
+
 
 async function loadProducts(){
  try{
@@ -76,8 +71,8 @@ async function loadProducts(){
   ]);
   products=snap.docs.map(d=>({id:d.id,...d.data()}));
   if(settingsSnap.exists())storeSettings={...storeSettings,...settingsSnap.data()};
-  if(!products.length)products=fallback;
- }catch(e){products=fallback}
+  if(!products.length)products=[];
+ }catch(e){products=[]}
  renderAll();
 }
 function money(n){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(Number(n)||0)}
