@@ -31,8 +31,12 @@ const money = n => new Intl.NumberFormat("en-IN", {
 function showGate(message = ""){
   user = null;
   isAdmin = false;
-  $("#authGate").hidden = false;
-  $("#adminApp").hidden = true;
+  const gate = $("#authGate");
+  const app = $("#adminApp");
+  gate.hidden = false;
+  gate.style.display = "grid";
+  app.hidden = true;
+  app.style.display = "none";
   $("#adminLogin").textContent = "Sign in with Google";
   $("#pageLogin").textContent = "Continue with Google ↗";
   if(message) toast(message);
@@ -40,13 +44,20 @@ function showGate(message = ""){
 
 function showAdmin(){
   $("#authGate").hidden = true;
+  $("#authGate").style.display = "none";
   $("#adminApp").hidden = false;
+  $("#adminApp").style.display = "grid";
   $("#adminLogin").textContent = "Sign out";
 }
 
 async function loadAdminData(){
-  products = (await getDocs(collection(db,"products"))).docs.map(d=>({id:d.id,...d.data()}));
-  orders = (await getDocs(collection(db,"orders"))).docs.map(d=>({id:d.id,...d.data()}));
+  const [productSnap, orderSnap] = await Promise.all([
+    getDocs(collection(db,"products")),
+    getDocs(collection(db,"orders"))
+  ]);
+  products = productSnap.docs.map(d=>({id:d.id,...d.data()}));
+  orders = orderSnap.docs.map(d=>({id:d.id,...d.data()}))
+    .sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
 }
 
 function render(){
@@ -141,26 +152,87 @@ function productForm(p={}){
 
 async function renderOrders(){
   $("#view").innerHTML = `
-    <p class="eyebrow">SALES</p><h1 class="title">Orders.</h1>
-    <div class="panel"><table class="table">
-      <thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Payment</th><th>Status</th><th></th></tr></thead>
-      <tbody>${orders.map(o=>`
-        <tr><td>${esc(o.orderNo)}</td><td>${esc(o.customerName)}</td><td>${money(o.total)}</td>
-        <td>${esc(o.paymentStatus)}</td><td><span class="pill">${esc(o.status)}</span></td>
-        <td><select data-status="${o.id}">
-          <option ${o.status==="Payment pending"?"selected":""}>Payment pending</option>
-          <option ${o.status==="Paid"?"selected":""}>Paid</option>
-          <option ${o.status==="Processing"?"selected":""}>Processing</option>
-          <option ${o.status==="Shipped"?"selected":""}>Shipped</option>
-          <option ${o.status==="Delivered"?"selected":""}>Delivered</option>
-          <option ${o.status==="Cancelled"?"selected":""}>Cancelled</option>
-        </select></td></tr>`).join("")}</tbody>
-    </table></div>`;
+    <div class="toolbar">
+      <div><p class="eyebrow">SALES & SHIPPING</p><h1 class="title">Orders.</h1></div>
+      <span class="pill">${orders.length} total</span>
+    </div>
+    <div class="panel">
+      ${orders.length ? orders.map(o=>`
+        <article class="order-card">
+          <div class="order-head">
+            <div>
+              <p class="eyebrow">${esc(o.orderNo||o.id)}</p>
+              <h3>${esc(o.customerName||"SZC customer")}</h3>
+              <small>${esc(o.userEmail||"")} · ${formatDate(o.createdAt)}</small>
+            </div>
+            <div class="order-total"><strong>${money(o.total)}</strong><span>${esc(o.paymentStatus||"pending")}</span></div>
+          </div>
+          <div class="order-grid">
+            <div>
+              <strong>Products</strong>
+              <div class="order-items">${orderItemsHtml(o.items)}</div>
+            </div>
+            <div>
+              <strong>Shipping address</strong>
+              <div class="admin-address">${addressHtml(o.address)}</div>
+            </div>
+          </div>
+          <div class="shipping-row">
+            <label>Status
+              <select data-status="${o.id}">
+                ${["Payment pending","Paid","Processing","Shipped","Out for delivery","Delivered","Cancelled"].map(st=>`<option ${o.status===st?"selected":""}>${st}</option>`).join("")}
+              </select>
+            </label>
+            <label>Courier / carrier
+              <input data-carrier="${o.id}" value="${esc(o.shipping?.carrier||"")}" placeholder="e.g. Delhivery">
+            </label>
+            <label>Tracking number
+              <input data-tracking="${o.id}" value="${esc(o.shipping?.trackingNumber||"")}" placeholder="Tracking ID">
+            </label>
+            <button class="primary" data-save-shipping="${o.id}">Save shipping</button>
+          </div>
+        </article>`).join("") : '<div class="empty">No orders yet.</div>'}
+    </div>`;
 
   $$("[data-status]").forEach(select=>select.onchange=async()=>{
-    await updateDoc(doc(db,"orders",select.dataset.status),{status:select.value,updatedAt:serverTimestamp()});
-    toast("Order updated");
+    await updateDoc(doc(db,"orders",select.dataset.status),{
+      status:select.value, updatedAt:serverTimestamp()
+    });
+    toast("Order status updated");
+    await refresh();
   });
+
+  $$("[data-save-shipping]").forEach(btn=>btn.onclick=async()=>{
+    const id=btn.dataset.saveShipping;
+    await updateDoc(doc(db,"orders",id),{
+      shipping:{
+        carrier:$(`[data-carrier="${id}"]`).value.trim(),
+        trackingNumber:$(`[data-tracking="${id}"]`).value.trim()
+      },
+      updatedAt:serverTimestamp()
+    });
+    toast("Shipping details saved");
+    await refresh();
+  });
+}
+
+function formatDate(ts){
+  if(!ts) return "Date unavailable";
+  try{return new Date((ts.seconds||0)*1000).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"})}
+  catch{return "Date unavailable"}
+}
+function addressHtml(a={}){
+  if(!a || !Object.keys(a).length) return '<span class="muted">No address saved</span>';
+  return `<strong>${esc(a.name||"")}</strong><br>${esc([a.line1,a.line2,a.city,a.district,a.state,a.pincode].filter(Boolean).join(", "))}`;
+}
+function orderItemsHtml(items=[]){
+  if(!Array.isArray(items)||!items.length) return '<span class="muted">No item data</span>';
+  return items.map(i=>{
+    const p=products.find(x=>x.id===i.id);
+    const name=i.name||p?.name||i.productName||"Product";
+    const price=Number(i.price??p?.price??0);
+    return `<div class="order-item"><span>${esc(name)} × ${Number(i.qty)||1}</span><strong>${money(price*(Number(i.qty)||1))}</strong></div>`;
+  }).join("");
 }
 
 async function getCustomerAddresses(uid){
@@ -173,19 +245,20 @@ async function customers(){
   const users = await Promise.all(snap.docs.map(async d=>{
     const u={id:d.id,...d.data()};
     u.addresses=await getCustomerAddresses(d.id).catch(()=>[]);
-    // Legacy fallback
+    u.orders=orders.filter(o=>o.userId===d.id);
     if(!u.addresses.length && u.address?.line1) u.addresses=[{id:"legacy",label:u.address.label||"Saved address",...u.address}];
     return u;
   }));
 
   $("#view").innerHTML = `
-    <p class="eyebrow">CUSTOMERS</p><h1 class="title">Customers & addresses.</h1>
+    <p class="eyebrow">CUSTOMERS</p><h1 class="title">Customers.</h1>
     <div class="panel"><table class="table customer-table">
-      <thead><tr><th>Customer</th><th>Email</th><th>Saved addresses</th></tr></thead>
+      <thead><tr><th>Customer</th><th>Email</th><th>Orders</th><th>Saved addresses</th></tr></thead>
       <tbody>${users.map(u=>`
         <tr>
           <td><strong>${esc(u.displayName||"SZC customer")}</strong></td>
           <td>${esc(u.email||"—")}</td>
+          <td><button class="secondary" data-customer-orders="${u.id}">${u.orders.length} order${u.orders.length===1?"":"s"}</button></td>
           <td>
             ${u.addresses.length ? u.addresses.map(a=>`
               <div class="admin-address ${a.isDefault?"is-default":""}">
@@ -197,6 +270,21 @@ async function customers(){
           </td>
         </tr>`).join("")}</tbody>
     </table></div>`;
+
+  $$("[data-customer-orders]").forEach(btn=>btn.onclick=()=>{
+    const customerOrders=orders.filter(o=>o.userId===btn.dataset.customerOrders);
+    $("#view").innerHTML=`
+      <div class="toolbar"><div><p class="eyebrow">CUSTOMER ORDERS</p><h1 class="title">Order history.</h1></div><button class="secondary" id="backCustomers">Back</button></div>
+      <div class="panel">${customerOrders.length?customerOrders.map(o=>`
+        <article class="order-card compact">
+          <div class="order-head">
+            <div><p class="eyebrow">${esc(o.orderNo||o.id)}</p><h3>${esc(o.customerName||"Customer")}</h3><small>${formatDate(o.createdAt)}</small></div>
+            <div class="order-total"><strong>${money(o.total)}</strong><span>${esc(o.status||"Pending")}</span></div>
+          </div>
+          <div class="order-grid"><div><strong>Items</strong><div class="order-items">${orderItemsHtml(o.items)}</div></div><div><strong>Delivered to</strong><div class="admin-address">${addressHtml(o.address)}</div></div></div>
+        </article>`).join(""):'<div class="empty">No orders for this customer.</div>'}</div>`;
+    $("#backCustomers").onclick=()=>{tab="customers";render()};
+  });
 }
 
 async function settings(){
@@ -237,7 +325,9 @@ async function finishAdminUser(signedInUser){
   }
   user=signedInUser;
   isAdmin=true;
-  await refresh();
+  showAdmin();
+  await loadAdminData();
+  render();
   toast("Admin access granted");
   return true;
 }

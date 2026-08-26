@@ -31,8 +31,15 @@ service cloud.firestore {
 
     // Multiple saved delivery addresses per customer.
     match /users/{userId}/addresses/{addressId} {
-      allow read, write: if signedIn()
-        && (request.auth.uid == userId || isAdmin());
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.name is string
+        && request.resource.data.line1 is string
+        && request.resource.data.city is string
+        && request.resource.data.pincode is string;
+      allow update: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if signedIn() && (request.auth.uid == userId || isAdmin());
     }
 
     match /orders/{orderId} {

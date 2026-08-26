@@ -66,7 +66,7 @@ function openProduct(id){
  $("#modalContent").innerHTML=`<div class="detail"><img src="${p.image||fallback[0].image}" alt="${escapeHtml(p.name)}"><div><p class="eyebrow">${escapeHtml(p.category||"SZC")}</p><h2>${escapeHtml(p.name)}</h2><div class="price">${money(p.price)}</div><p style="line-height:1.7;color:var(--muted)">${escapeHtml(p.description||"A considered SZC product.")}</p><div class="form"><button class="btn btn-dark" id="addProduct">Add to bag</button><button class="btn" id="wishProduct">♡ Save to wishlist</button></div></div></div>`;
  $("#modal").classList.add("open");$("#addProduct").onclick=()=>{addCart(p.id);closeModal()};$("#wishProduct").onclick=()=>toggleWish(p.id);
 }
-function addCart(id){const p=products.find(x=>x.id===id);if(!p)return;const x=cart.find(i=>i.id===id);x?x.qty++:cart.push({id,qty:1});save();toast("Added to bag");}
+function addCart(id){const p=products.find(x=>x.id===id);if(!p)return;const x=cart.find(i=>i.id===id);x?x.qty++:cart.push({id,qty:1,name:p.name,price:Number(p.price)||0});save();toast("Added to bag");}
 function save(){localStorage.setItem("szc_cart",JSON.stringify(cart));localStorage.setItem("szc_wishlist",JSON.stringify(wishlist));updateCart()}
 function updateCart(){$("#cartCount").textContent=cart.reduce((a,b)=>a+b.qty,0)}
 function toggleWish(id){wishlist=wishlist.includes(id)?wishlist.filter(x=>x!==id):[...wishlist,id];save();renderAll();toast(wishlist.includes(id)?"Saved to wishlist":"Removed from wishlist")}
@@ -210,7 +210,60 @@ function addressForm(existing={}){
  };
 }
 
-async function orders(){if(!currentUser){return account()}let snap=await getDocs(query(collection(db,"orders"),where("userId","==",currentUser.uid),orderBy("createdAt","desc")));let rows=snap.docs.map(d=>d.data()).map(o=>`<div class="line"><div><strong>${escapeHtml(o.orderNo||"SZC Order")}</strong><br><small>${escapeHtml(o.status||"Pending")}</small></div><b>${money(o.total)}</b></div>`).join("");openDrawer(`<div class="account-box"><p class="eyebrow">ACCOUNT</p><h2>Your orders.</h2>${rows||'<div class="empty">No orders yet.</div>'}</div>`)}
+async function orders(){
+ if(!currentUser){return account()}
+ try{
+  const snap=await getDocs(query(collection(db,"orders"),where("userId","==",currentUser.uid)));
+  const list=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+  const rows=list.map(o=>`
+   <button class="order-history-card" data-order-detail="${o.id}">
+    <span><strong>${escapeHtml(o.orderNo||"SZC Order")}</strong><small>${escapeHtml(o.status||"Payment pending")} · ${formatDate(o.createdAt)}</small></span>
+    <b>${money(o.total)}</b><span>›</span>
+   </button>`).join("");
+  openDrawer(`<div class="account-box">
+    <p class="eyebrow">ACCOUNT</p><h2>Your orders.</h2>
+    <p style="color:var(--muted);line-height:1.6">See what you ordered, where it is going, and the latest shipping status.</p>
+    <div class="order-history">${rows||'<div class="empty">No orders yet.</div>'}</div>
+  </div>`);
+  $$("[data-order-detail]").forEach(b=>b.onclick=()=>{
+    const o=list.find(x=>x.id===b.dataset.orderDetail);
+    orderDetail(o);
+  });
+ }catch(e){
+  console.error(e);
+  toast("Could not load your orders");
+ }
+}
+function formatDate(ts){
+ if(!ts) return "Date unavailable";
+ try{return new Date((ts.seconds||0)*1000).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"})}
+ catch{return "Date unavailable"}
+}
+function orderDetail(o){
+ if(!o)return;
+ const items=Array.isArray(o.items)?o.items:[];
+ const itemRows=items.map(i=>{
+   const p=products.find(x=>x.id===i.id);
+   const name=i.name||p?.name||i.productName||"Product";
+   const price=Number(i.price??p?.price??0);
+   const qty=Number(i.qty)||1;
+   return `<div class="line"><div><strong>${escapeHtml(name)}</strong><br><small>${qty} × ${money(price)}</small></div><b>${money(price*qty)}</b></div>`;
+ }).join("");
+ const a=o.address||{};
+ openDrawer(`<div class="account-box">
+  <button class="text-link" id="backOrders">← Back to orders</button>
+  <p class="eyebrow" style="margin-top:25px">ORDER DETAILS</p>
+  <h2>${escapeHtml(o.orderNo||"SZC Order")}</h2>
+  <div class="order-status-box"><strong>${escapeHtml(o.status||"Payment pending")}</strong><small>${escapeHtml(o.paymentStatus||"Payment pending")}</small></div>
+  <h3>Items</h3>${itemRows||'<p class="empty">No item details available.</p>'}
+  <h3>Shipping to</h3>
+  <div class="checkout-address"><strong>${escapeHtml(a.name||currentUser.displayName||"")}</strong><br>${escapeHtml(addressText(a))}</div>
+  <h3>Shipping details</h3>
+  <div class="checkout-address">${o.shipping?.carrier?`<strong>${escapeHtml(o.shipping.carrier)}</strong><br>`:""}${o.shipping?.trackingNumber?`Tracking: ${escapeHtml(o.shipping.trackingNumber)}`:"Tracking information will appear here when your order ships."}</div>
+  <div class="line"><strong>Total</strong><strong>${money(o.total)}</strong></div>
+ </div>`);
+ $("#backOrders").onclick=orders;
+}
 function cartDrawer(){
  if(!cart.length)return openDrawer('<div class="cart-box"><p class="eyebrow">YOUR BAG</p><h2>Your bag is empty.</h2><p style="color:var(--muted)">Add something you like and it will appear here.</p></div>');
  let total=0,rows=cart.map(i=>{const p=products.find(x=>x.id===i.id);if(!p)return "";total+=p.price*i.qty;return `<div class="line"><div><strong>${escapeHtml(p.name)}</strong><br><small>${i.qty} × ${money(p.price)}</small></div><button class="text-link" data-remove="${p.id}">Remove</button></div>`}).join("");
@@ -257,8 +310,24 @@ async function placeOrder(total,address){
  const pay=$("#pay").value;if(!pay)return toast("Select a payment method");
  if(!address)return toast("Select a delivery address");
  const orderNo="SZC-"+Date.now().toString().slice(-8);
- try{await addDoc(collection(db,"orders"),{orderNo,userId:currentUser.uid,customerName:address.name||currentUser.displayName||"",address:{label:address.label||"",name:address.name||"",line1:address.line1||"",line2:address.line2||"",city:address.city||"",district:address.district||"",state:address.state||"",pincode:address.pincode||""},addressId:address.id,items:cart,total,paymentMethod:pay,paymentStatus:"pending_verification",status:"Payment pending",createdAt:serverTimestamp()});cart=[];save();openDrawer(`<div class="account-box"><p class="eyebrow">ORDER CREATED</p><h2>${orderNo}</h2><p style="line-height:1.7;color:var(--muted)">Your order has been created and is awaiting verified payment. Connect your merchant UPI/payment provider before accepting live payments.</p><button class="btn btn-dark" style="width:100%" onclick="location.hash='home';location.reload()">Back to store</button></div>`)}
- catch(e){toast("Could not create order: "+e.message)}
+ const items=cart.map(i=>{
+  const p=products.find(x=>x.id===i.id);
+  return {id:i.id,name:i.name||p?.name||"Product",price:Number(i.price??p?.price??0),qty:Number(i.qty)||1,image:p?.image||""};
+ });
+ try{
+  await addDoc(collection(db,"orders"),{
+   orderNo,userId:currentUser.uid,
+   customerName:address.name||currentUser.displayName||"",
+   userEmail:currentUser.email||"",
+   address:{label:address.label||"",name:address.name||"",line1:address.line1||"",line2:address.line2||"",city:address.city||"",district:address.district||"",state:address.state||"",pincode:address.pincode||""},
+   addressId:address.id,items,total,paymentMethod:pay,paymentStatus:"pending_verification",
+   status:"Payment pending",shipping:{carrier:"",trackingNumber:""},
+   createdAt:serverTimestamp(),updatedAt:serverTimestamp()
+  });
+  cart=[];save();
+  openDrawer(`<div class="account-box"><p class="eyebrow">ORDER CREATED</p><h2>${orderNo}</h2><p style="line-height:1.7;color:var(--muted)">Your order has been created. You can follow its status and shipping details from your account.</p><button class="btn btn-dark" id="viewCreatedOrder" style="width:100%">View my orders</button></div>`);
+  $("#viewCreatedOrder").onclick=orders;
+ }catch(e){toast("Could not create order: "+e.message)}
 }
 
 $("#searchBtn").onclick=()=>{location.hash="shop";setTimeout(()=>$("#searchInput").focus(),100)}
