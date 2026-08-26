@@ -55,3 +55,7 @@ Current administrator UID:
 `ihSDHUk86DY8McVcLN7gjzt96Bm1`
 
 For production, keep Firestore Rules as the final authorization boundary.
+
+
+## Admin interaction fix (v9)
+Admin navigation, product View/Edit/Delete, order Preview, payment product editing, and modal closing use delegated click handling so they continue to work after each dashboard re-render.

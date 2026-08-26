@@ -72,9 +72,7 @@ function productsPage(){
  <div class="section-card"><div class="searchbar"><input id="productSearch" placeholder="Search products by name or category…"></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Type</th><th>Payment</th><th style="text-align:right">Actions</th></tr></thead><tbody id="productRows">${rows||`<tr><td colspan="6"><div class="empty-state">No products yet. Click “Add product” to create your first one.</div></td></tr>`}</tbody></table></div></div>`;
  $("#newProduct").onclick=()=>openProduct();
  $("#productSearch").oninput=e=>{const q=e.target.value.toLowerCase();$$("#productRows tr").forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q)?"":"none")};
- $$('[data-view-product]').forEach(b=>b.onclick=()=>viewProduct(products.find(p=>p.id===b.dataset.viewProduct)));
- $$('[data-edit-product]').forEach(b=>b.onclick=()=>openProduct(products.find(p=>p.id===b.dataset.editProduct)));
- $$('[data-delete-product]').forEach(b=>b.onclick=async()=>{const p=products.find(x=>x.id===b.dataset.deleteProduct);if(p&&!confirm(`Delete “${p.name}”?`))return;try{await deleteDoc(doc(db,"products",b.dataset.deleteProduct));await refresh();toast("Product deleted")}catch(e){toast(e.message)}});
+
 }
 
 function productFormFields(p){const opts=p.paymentOptions||["upi"];return `<div class="form-grid"><div class="field"><label>Product name</label><input id="pName" value="${esc(p.name)}" placeholder="Product name"></div><div class="field"><label>Category</label><input id="pCategory" value="${esc(p.category)}" placeholder="Fashion, Home, Honey…"></div><div class="field"><label>Price (₹)</label><input id="pPrice" type="number" min="0" value="${p.price??""}"></div><div class="field"><label>Stock</label><input id="pStock" type="number" min="0" value="${p.stock??""}"></div><div class="field full"><label>Product image URL</label><input id="pImage" value="${esc(p.image)}" placeholder="https://…"></div><div class="field"><label>Badge</label><input id="pBadge" value="${esc(p.badge)}" placeholder="NEW / BEST"></div><div class="field"><label>Product type</label><select id="pFeatured"><option value="false" ${!p.featured?"selected":""}>Standard</option><option value="true" ${p.featured?"selected":""}>Featured</option></select></div><div class="field full"><label>Payment methods allowed</label><div class="check-panel"><label><input id="pUpi" type="checkbox" ${opts.includes("upi")?"checked":""}> UPI / Google Pay</label><label><input id="pCard" type="checkbox" ${opts.includes("card")?"checked":""}> Card</label></div></div><div class="field full"><label>Description</label><textarea id="pDescription" placeholder="Product description">${esc(p.description)}</textarea></div></div>`}
@@ -93,7 +91,7 @@ function ordersPage(){
 function orderCard(o){return `<article class="order-card"><div class="order-top"><div><div class="order-id">${esc(o.orderNo||o.id)}</div><div class="order-customer">${esc(o.customerName||"Customer")} · ${esc(o.userEmail||"")} · ${fmtDate(o.createdAt)}</div></div><div class="order-total">${money(o.total)}</div></div><div class="order-actions"><span class="status ${String(o.status).includes("Delivered")?"green":""}">${esc(o.status||"Payment pending")}</span><span class="status">${esc(o.paymentMethod||"UPI")} · ${esc(o.paymentStatus||"pending")}</span><button class="primary" data-preview="${o.id}">Preview full order</button><select data-order-status="${o.id}">${["Payment pending","Paid","Processing","Shipped","Out for delivery","Delivered","Cancelled"].map(x=>`<option ${o.status===x?"selected":""}>${x}</option>`).join("")}</select></div><div class="order-body"><div class="order-box"><h4>Products ordered</h4>${Array.isArray(o.items)&&o.items.length?o.items.map(i=>`<div class="order-item"><span>${esc(i.name||"Product")} × ${Number(i.qty)||1}</span><strong>${money((Number(i.price)||0)*(Number(i.qty)||1))}</strong></div>`).join(""):"<span class='mini-note'>No product snapshot found.</span>"}</div><div class="order-box"><h4>Delivery address</h4>${addressHtml(o.address)}</div></div><div class="shipping-grid"><label>Courier<input data-carrier="${o.id}" value="${esc(o.shipping?.carrier||"")}" placeholder="Delhivery, DTDC…"></label><label>Tracking number<input data-tracking="${o.id}" value="${esc(o.shipping?.trackingNumber||"")}" placeholder="Tracking ID"></label></div><div class="order-actions"><button class="primary" data-save-shipping="${o.id}">Save shipping details</button></div></article>`}
 function addressHtml(a={}){return Object.keys(a||{}).length?`<strong>${esc(a.name||"Customer")}</strong><div class="mini-note" style="margin-top:6px">${esc([a.line1,a.line2,a.city,a.district,a.state,a.pincode].filter(Boolean).join(", "))}<br>${esc(a.phone||"")}</div>`:`<span class="mini-note">No delivery address stored.</span>`}
 function previewOrder(o){if(!o)return;modal(`<button class="modal-close" data-close-modal>×</button><p class="eyebrow">ORDER PREVIEW</p><h2>${esc(o.orderNo||o.id)}</h2><p class="mini-note">${esc(o.customerName||"Customer")} · ${esc(o.userEmail||"")} · ${fmtDate(o.createdAt)}</p><div class="preview-grid"><div class="preview-box"><h4>Order total</h4><strong>${money(o.total)}</strong></div><div class="preview-box"><h4>Payment</h4><strong>${esc(o.paymentMethod||"Not selected")} · ${esc(o.paymentStatus||"pending")}</strong></div><div class="preview-box"><h4>Order status</h4><strong>${esc(o.status||"Payment pending")}</strong></div><div class="preview-box"><h4>Tracking</h4><strong>${esc(o.shipping?.trackingNumber||"Not assigned")}</strong></div></div><div class="preview-box" style="margin-top:12px"><h4>Items ordered</h4>${Array.isArray(o.items)&&o.items.length?o.items.map(i=>`<div class="order-item"><span>${esc(i.name||"Product")} × ${Number(i.qty)||1}</span><strong>${money((Number(i.price)||0)*(Number(i.qty)||1))}</strong></div>`).join(""):"No item data"}</div><div class="preview-box" style="margin-top:12px"><h4>Shipping address</h4>${addressHtml(o.address)}</div><div class="preview-box" style="margin-top:12px"><h4>Shipping</h4><div class="mini-note">Courier: ${esc(o.shipping?.carrier||"Not assigned")}<br>Tracking: ${esc(o.shipping?.trackingNumber||"Not assigned")}</div></div>`);$$("[data-close-modal]").forEach(x=>x.onclick=closeModal)}
-function bindPreviews(){$$('[data-preview]').forEach(b=>b.onclick=()=>previewOrder(orders.find(o=>o.id===b.dataset.preview)))}
+function bindPreviews(){}
 
 async function customersPage(){
  setActive();const snap=await getDocs(collection(db,"users"));const users=await Promise.all(snap.docs.map(async d=>{const a=await getDocs(collection(db,"users",d.id,"addresses")).catch(()=>({docs:[]}));return{id:d.id,...d.data(),addresses:a.docs.map(x=>({id:x.id,...x.data()})),orders:orders.filter(o=>o.userId===d.id)}}));
@@ -101,10 +99,40 @@ async function customersPage(){
 }
 async function paymentPage(){
  setActive();$("#view").innerHTML=`${header("PAYMENT & STORE","Payment options.","Control which payment methods your store and individual products offer.")}<div class="section-card"><div class="notice" style="background:#eee6d8;padding:14px;font-size:12px;line-height:1.5">UPI / Google Pay uses the merchant UPI ID. Card payments require a real gateway and server-side verification; this admin panel never marks a card payment as successful by itself.</div><div class="form-grid" style="margin-top:18px"><div class="field full"><label>Store name</label><input id="sName" value="${esc(settings.storeName||"SZC Store")}"></div><div class="field"><label>Merchant UPI ID</label><input id="sUpi" value="${esc(settings.upiId||"")}" placeholder="yourname@upi"></div><div class="field"><label>UPI display name</label><input id="sUpiName" value="${esc(settings.upiName||"SZC Store")}"></div><div class="field full"><div class="check-panel"><label><input id="sUpiEnabled" type="checkbox" ${settings.upiEnabled!==false?"checked":""}> Enable UPI / Google Pay</label><label><input id="sGpay" type="checkbox" ${settings.gpayEnabled!==false?"checked":""}> Show Google Pay option</label><label><input id="sCard" type="checkbox" ${settings.cardEnabled?"checked":""}> Enable Card option</label></div></div></div><div class="form-actions"><button class="primary" id="saveSettings">Save payment settings</button></div></div><div class="section-card"><div class="section-title"><h2>Per-product payment methods</h2><button class="secondary" id="paymentProducts">Manage products</button></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Product</th><th>Allowed payment methods</th><th style="text-align:right">Action</th></tr></thead><tbody>${products.map(p=>`<tr><td>${esc(p.name)}</td><td>${(p.paymentOptions||["upi"]).map(x=>esc(x.toUpperCase())).join(" / ")}</td><td><div class="action-row"><button class="primary" data-edit-payment="${p.id}">Edit product</button></div></td></tr>`).join("")}</tbody></table></div></div>`;
- $("#saveSettings").onclick=async()=>{try{await setDoc(doc(db,"settings","store"),{storeName:$("#sName").value.trim(),upiId:$("#sUpi").value.trim(),upiName:$("#sUpiName").value.trim(),upiEnabled:$("#sUpiEnabled").checked,gpayEnabled:$("#sGpay").checked,cardEnabled:$("#sCard").checked,updatedAt:serverTimestamp()},{merge:true});await refresh();toast("Payment settings saved")}catch(e){toast(e.message)}};$("#paymentProducts").onclick=()=>go("products");$$('[data-edit-payment]').forEach(b=>b.onclick=()=>openProduct(products.find(p=>p.id===b.dataset.editPayment)));
+ $("#saveSettings").onclick=async()=>{try{await setDoc(doc(db,"settings","store"),{storeName:$("#sName").value.trim(),upiId:$("#sUpi").value.trim(),upiName:$("#sUpiName").value.trim(),upiEnabled:$("#sUpiEnabled").checked,gpayEnabled:$("#sGpay").checked,cardEnabled:$("#sCard").checked,updatedAt:serverTimestamp()},{merge:true});await refresh();toast("Payment settings saved")}catch(e){toast(e.message)}};$("#paymentProducts").onclick=()=>go("products");
 }
-function go(next){tab=next;render()}
-$$('.nav-item').forEach(b=>b.onclick=()=>go(b.dataset.tab));$("#sidebarStore").onclick=()=>window.open("index.html","_blank");
+function go(next){
+  tab=next;
+  render();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+// One delegated click handler keeps navigation/actions working even after the
+// dashboard replaces #view with new HTML.
+document.addEventListener("click", e=>{
+  const nav=e.target.closest(".nav-item[data-tab]");
+  if(nav){e.preventDefault();go(nav.dataset.tab);return;}
+  const view=e.target.closest("[data-view-product]");
+  if(view){e.preventDefault();viewProduct(products.find(p=>p.id===view.dataset.viewProduct));return;}
+  const edit=e.target.closest("[data-edit-product]");
+  if(edit){e.preventDefault();openProduct(products.find(p=>p.id===edit.dataset.editProduct));return;}
+  const del=e.target.closest("[data-delete-product]");
+  if(del){e.preventDefault();deleteProduct(del.dataset.deleteProduct);return;}
+  const preview=e.target.closest("[data-preview]");
+  if(preview){e.preventDefault();previewOrder(orders.find(o=>o.id===preview.dataset.preview));return;}
+  const editPay=e.target.closest("[data-edit-payment]");
+  if(editPay){e.preventDefault();openProduct(products.find(p=>p.id===editPay.dataset.editPayment));return;}
+  const close=e.target.closest("[data-close-modal]");
+  if(close){e.preventDefault();closeModal();return;}
+  if(e.target.id==="sidebarStore"){window.open("index.html","_blank");return;}
+});
+
+async function deleteProduct(id){
+  const p=products.find(x=>x.id===id);
+  if(!p || !confirm(`Delete “${p.name}”?`)) return;
+  try{await deleteDoc(doc(db,"products",id));await refresh();toast("Product deleted");}
+  catch(e){console.error(e);toast(e?.message||"Could not delete product")}
+}
 
 async function finish(u){if(!u)return;if(u.uid!==ADMIN_UID){await signOut(auth).catch(()=>{});gate("Access denied: this Google account is not the SZC administrator.");return}user=u;try{await loadData();render();toast("Admin access granted")}catch(e){gate();toast("Firestore error: "+e.message)}}
 async function login(){try{const r=await signInWithPopup(auth,provider);await finish(r.user)}catch(e){if(e?.code==="auth/popup-blocked"||e?.code==="auth/popup-closed-by-user"){try{await signInWithRedirect(auth,provider)}catch(x){toast(x.message)}}else toast(e?.message||"Google sign-in failed")}}
