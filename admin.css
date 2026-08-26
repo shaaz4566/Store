@@ -11,3 +11,15 @@
 body.admin-authenticated #adminSidebar{display:block}
 body:not(.admin-authenticated) main{grid-template-columns:1fr}
 body:not(.admin-authenticated) .content{min-height:calc(100vh - 84px)}
+
+/* Final authentication gate */
+#adminApp[hidden]{display:none!important}
+#authGate{min-height:calc(100vh - 84px);display:grid;place-items:center;padding:30px;background:#f6f1e7}
+#authGate[hidden]{display:none!important}
+.auth-gate .login-card{width:min(520px,100%);background:#fbf8f2;border:1px solid #d9d0c2;padding:55px;box-shadow:0 24px 70px rgba(35,27,18,.10)}
+.admin-address{border:1px solid #d9d0c2;padding:12px;margin:5px 0;line-height:1.5;font-size:12px}
+.admin-address.is-default{border-color:#314738}
+.admin-address-title{display:flex;gap:8px;align-items:center;margin-bottom:4px}
+.admin-address small{display:block;color:#777;margin-top:4px}
+.customer-table td{vertical-align:top}
+@media(max-width:600px){.auth-gate .login-card{padding:35px 25px}#authGate{padding:15px}}

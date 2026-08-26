@@ -29,6 +29,12 @@ service cloud.firestore {
       }
     }
 
+    // Multiple saved delivery addresses per customer.
+    match /users/{userId}/addresses/{addressId} {
+      allow read, write: if signedIn()
+        && (request.auth.uid == userId || isAdmin());
+    }
+
     match /orders/{orderId} {
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid;

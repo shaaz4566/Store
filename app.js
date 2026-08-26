@@ -1,4 +1,4 @@
-let auth,provider,db,signInWithPopup,signOut,onAuthStateChanged,collection,getDocs,getDoc,doc,setDoc,addDoc,query,orderBy,where,serverTimestamp;
+let auth,provider,db,signInWithPopup,signOut,onAuthStateChanged,collection,getDocs,getDoc,doc,setDoc,addDoc,deleteDoc,query,orderBy,where,serverTimestamp;
 let firebaseReady = false;
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -6,7 +6,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 async function loadFirebase(){
   try{
     const fb = await import("./firebase.js");
-    ({auth,provider,db,signInWithPopup,signOut,onAuthStateChanged,collection,getDocs,getDoc,doc,setDoc,addDoc,query,orderBy,where,serverTimestamp}=fb);
+    ({auth,provider,db,signInWithPopup,signOut,onAuthStateChanged,collection,getDocs,getDoc,doc,setDoc,addDoc,deleteDoc,query,orderBy,where,serverTimestamp}=fb);
     firebaseReady=true;
     return true;
   }catch(error){
@@ -82,7 +82,134 @@ async function login(){
   try{await signInWithPopup(auth,provider);closeDrawer();toast("Welcome to SZC")}
   catch(e){console.error(e);toast(e.message||"Sign-in failed")}
 }
-async function address(){if(!currentUser){return account()}let snap=await getDoc(doc(db,"users",currentUser.uid));let a=snap.exists()?snap.data().address||{}:{};openDrawer(`<div class="account-box"><p class="eyebrow">DELIVERY</p><h2>Your address.</h2><div class="form"><input id="aname" placeholder="Full name" value="${escapeHtml(a.name||currentUser.displayName||"")}"><input id="aline1" placeholder="Address" value="${escapeHtml(a.line1||"")}"><input id="acity" placeholder="City" value="${escapeHtml(a.city||"")}"><input id="adistrict" placeholder="District" value="${escapeHtml(a.district||"")}"><input id="apincode" placeholder="PIN code" value="${escapeHtml(a.pincode||"")}"><button class="btn btn-dark" id="saveAddress">Save address</button></div></div>`);$("#saveAddress").onclick=async()=>{await setDoc(doc(db,"users",currentUser.uid),{address:{name:$("#aname").value,line1:$("#aline1").value,city:$("#acity").value,district:$("#adistrict").value,pincode:$("#apincode").value}}, {merge:true});toast("Address saved")}}
+async function getSavedAddresses(){
+ if(!currentUser || !firebaseReady) return [];
+ try{
+  const snap=await getDocs(collection(db,"users",currentUser.uid,"addresses"));
+  let list=snap.docs.map(d=>({id:d.id,...d.data()}));
+  // Backward compatibility: migrate the original single-address field.
+  if(!list.length){
+   const userSnap=await getDoc(doc(db,"users",currentUser.uid));
+   const legacy=userSnap.exists()?userSnap.data().address:null;
+   if(legacy?.line1){
+    const ref=await addDoc(collection(db,"users",currentUser.uid,"addresses"),{
+     ...legacy,label:legacy.label||"Home",isDefault:true,createdAt:serverTimestamp(),updatedAt:serverTimestamp()
+    });
+    list=[{id:ref.id,...legacy,label:legacy.label||"Home",isDefault:true}];
+   }
+  }
+  return list.sort((a,b)=>Number(b.isDefault)-Number(a.isDefault));
+ }catch(e){
+  console.error("Address load failed:",e);
+  toast("Could not load saved addresses");
+  return [];
+ }
+}
+
+function addressText(a){
+ return [a.line1,a.line2,a.city,a.district,a.state,a.pincode].filter(Boolean).join(", ");
+}
+
+async function address(){
+ if(!currentUser){return account()}
+ const addresses=await getSavedAddresses();
+ const rows=addresses.map(a=>`
+  <div class="saved-address ${a.isDefault?"default":""}">
+   <div>
+    <div class="address-top"><strong>${escapeHtml(a.label||"Address")}</strong>${a.isDefault?'<span class="address-default">DEFAULT</span>':""}</div>
+    <small>${escapeHtml(a.name||currentUser.displayName||"")}</small>
+    <p>${escapeHtml(addressText(a))}</p>
+   </div>
+   <div class="address-actions">
+    ${a.isDefault?"":`<button class="text-link" data-default-address="${a.id}">Make default</button>`}
+    <button class="text-link" data-edit-address="${a.id}">Edit</button>
+    <button class="text-link danger-link" data-delete-address="${a.id}">Delete</button>
+   </div>
+  </div>`).join("");
+
+ openDrawer(`<div class="account-box">
+  <p class="eyebrow">DELIVERY</p>
+  <h2>Saved addresses.</h2>
+  <p style="color:var(--muted);line-height:1.6">Save multiple delivery addresses and choose a different one whenever you checkout.</p>
+  <div class="saved-addresses">${rows||'<div class="empty">No saved addresses yet.</div>'}</div>
+  <button class="btn btn-dark" id="addAddress" style="width:100%;margin-top:18px">+ Add new address</button>
+ </div>`);
+
+ $("#addAddress").onclick=()=>addressForm();
+ $$("[data-default-address]").forEach(b=>b.onclick=async()=>{
+  await setDefaultAddress(b.dataset.defaultAddress);
+  address();
+ });
+ $$("[data-edit-address]").forEach(b=>b.onclick=()=>addressForm(addresses.find(a=>a.id===b.dataset.editAddress)));
+ $$("[data-delete-address]").forEach(b=>b.onclick=async()=>{
+  if(!confirm("Delete this saved address?"))return;
+  await deleteDoc(doc(db,"users",currentUser.uid,"addresses",b.dataset.deleteAddress));
+  toast("Address deleted");
+  address();
+ });
+}
+
+async function setDefaultAddress(id){
+ const addresses=await getSavedAddresses();
+ await Promise.all(addresses.map(a=>setDoc(
+  doc(db,"users",currentUser.uid,"addresses",a.id),
+  {isDefault:a.id===id,updatedAt:serverTimestamp()},
+  {merge:true}
+ )));
+ toast("Default address updated");
+}
+
+function addressForm(existing={}){
+ openDrawer(`<div class="account-box">
+  <p class="eyebrow">DELIVERY ADDRESS</p>
+  <h2>${existing.id?"Edit address.":"Add address."}</h2>
+  <div class="form">
+   <input id="alabel" placeholder="Label (Home, Work, etc.)" value="${escapeHtml(existing.label||"Home")}">
+   <input id="aname" placeholder="Full name" value="${escapeHtml(existing.name||currentUser.displayName||"")}">
+   <input id="aline1" placeholder="Address line 1" value="${escapeHtml(existing.line1||"")}">
+   <input id="aline2" placeholder="Address line 2 (optional)" value="${escapeHtml(existing.line2||"")}">
+   <input id="acity" placeholder="City" value="${escapeHtml(existing.city||"")}">
+   <input id="adistrict" placeholder="District" value="${escapeHtml(existing.district||"")}">
+   <input id="astate" placeholder="State" value="${escapeHtml(existing.state||"Kerala")}">
+   <input id="apincode" inputmode="numeric" placeholder="PIN code" value="${escapeHtml(existing.pincode||"")}">
+   <label class="check-row"><input id="adefault" type="checkbox" ${existing.isDefault||!existing.id?"checked":""}> Make this my default address</label>
+   <button class="btn btn-dark" id="saveAddress">${existing.id?"Save changes":"Save address"}</button>
+  </div>
+ </div>`);
+
+ $("#saveAddress").onclick=async()=>{
+  const data={
+   label:$("#alabel").value.trim()||"Address",
+   name:$("#aname").value.trim(),
+   line1:$("#aline1").value.trim(),
+   line2:$("#aline2").value.trim(),
+   city:$("#acity").value.trim(),
+   district:$("#adistrict").value.trim(),
+   state:$("#astate").value.trim(),
+   pincode:$("#apincode").value.trim(),
+   updatedAt:serverTimestamp()
+  };
+  if(!data.name||!data.line1||!data.city||!data.pincode)return toast("Please complete the required address fields");
+  const ref=existing.id
+   ? doc(db,"users",currentUser.uid,"addresses",existing.id)
+   : doc(collection(db,"users",currentUser.uid,"addresses"));
+  if($("#adefault").checked){
+   await setDefaultAddress(existing.id||"__new__").catch(()=>{});
+  }
+  await setDoc(ref,{...data,isDefault:$("#adefault").checked,createdAt:existing.createdAt||serverTimestamp()},{merge:true});
+  const saved=await getSavedAddresses();
+  if($("#adefault").checked){
+   await Promise.all(saved.filter(a=>a.id!==ref.id).map(a=>setDoc(
+    doc(db,"users",currentUser.uid,"addresses",a.id),{isDefault:false,updatedAt:serverTimestamp()},{merge:true}
+   )));
+  } else if(saved.length===0){
+   await setDoc(ref,{isDefault:true},{merge:true});
+  }
+  toast("Address saved");
+  address();
+ };
+}
+
 async function orders(){if(!currentUser){return account()}let snap=await getDocs(query(collection(db,"orders"),where("userId","==",currentUser.uid),orderBy("createdAt","desc")));let rows=snap.docs.map(d=>d.data()).map(o=>`<div class="line"><div><strong>${escapeHtml(o.orderNo||"SZC Order")}</strong><br><small>${escapeHtml(o.status||"Pending")}</small></div><b>${money(o.total)}</b></div>`).join("");openDrawer(`<div class="account-box"><p class="eyebrow">ACCOUNT</p><h2>Your orders.</h2>${rows||'<div class="empty">No orders yet.</div>'}</div>`)}
 function cartDrawer(){
  if(!cart.length)return openDrawer('<div class="cart-box"><p class="eyebrow">YOUR BAG</p><h2>Your bag is empty.</h2><p style="color:var(--muted)">Add something you like and it will appear here.</p></div>');
@@ -92,15 +219,45 @@ function cartDrawer(){
 }
 async function checkout(){
  if(!currentUser){closeDrawer();account();toast("Sign in to continue");return}
+ const addresses=await getSavedAddresses();
  let total=cart.reduce((sum,i)=>{const p=products.find(x=>x.id===i.id);return sum+(p?p.price*i.qty:0)},0);
- let snap=await getDoc(doc(db,"users",currentUser.uid));let a=snap.exists()?snap.data().address||{}:{};
- openDrawer(`<div class="cart-box"><p class="eyebrow">CHECKOUT</p><h2>Delivery & payment.</h2><div class="form"><input id="cname" placeholder="Full name" value="${escapeHtml(a.name||currentUser.displayName||"")}"><input id="cline" placeholder="Address" value="${escapeHtml(a.line1||"")}"><input id="ccity" placeholder="City" value="${escapeHtml(a.city||"")}"><input id="cdistrict" placeholder="District" value="${escapeHtml(a.district||"")}"><input id="cpin" placeholder="PIN code" value="${escapeHtml(a.pincode||"")}"><select id="pay"><option value="">Select payment method</option><option value="upi">UPI / Google Pay</option></select><div class="line"><strong>Total</strong><strong>${money(total)}</strong></div><button class="btn btn-dark" id="place">Place order</button><small style="color:var(--muted)">Payment is only confirmed after a verified merchant payment flow. This storefront does not fake payment success.</small></div></div>`);
- $("#place").onclick=()=>placeOrder(total);
+ const options=addresses.map(a=>`<option value="${a.id}" ${a.isDefault?"selected":""}>${escapeHtml(a.label||"Address")} — ${escapeHtml(a.city||"")}${a.pincode?" "+escapeHtml(a.pincode):""}</option>`).join("");
+ openDrawer(`<div class="cart-box">
+  <p class="eyebrow">CHECKOUT</p><h2>Delivery & payment.</h2>
+  <div class="form">
+   ${addresses.length?`
+   <label class="field-label">Choose delivery address</label>
+   <select id="checkoutAddress">${options}</select>
+   <div id="checkoutAddressPreview" class="checkout-address"></div>
+   <button class="text-link" id="manageCheckoutAddresses" type="button">Manage saved addresses</button>
+   `:`<div class="notice-box">You need to add a delivery address before checkout.</div>
+   <button class="btn" id="addCheckoutAddress" type="button">+ Add delivery address</button>`}
+   <select id="pay"><option value="">Select payment method</option><option value="upi">UPI / Google Pay</option></select>
+   <div class="line"><strong>Total</strong><strong>${money(total)}</strong></div>
+   <button class="btn btn-dark" id="place" ${addresses.length?"":"disabled"}>Place order</button>
+   <small style="color:var(--muted)">Payment is only confirmed after a verified merchant payment flow. This storefront does not fake payment success.</small>
+  </div>
+ </div>`);
+
+ if(!addresses.length){
+  $("#addCheckoutAddress").onclick=()=>addressForm();
+  return;
+ }
+ const updatePreview=()=>{
+  const a=addresses.find(x=>x.id===$("#checkoutAddress").value);
+  $("#checkoutAddressPreview").innerHTML=a?`<strong>${escapeHtml(a.name||"")}</strong><br>${escapeHtml(addressText(a))}`:"";
+ };
+ updatePreview();
+ $("#checkoutAddress").onchange=updatePreview;
+ $("#manageCheckoutAddresses").onclick=()=>address();
+ $("#place").onclick=()=>placeOrder(total,addresses.find(x=>x.id===$("#checkoutAddress").value));
 }
-async function placeOrder(total){
+
+async function placeOrder(total,address){
  const pay=$("#pay").value;if(!pay)return toast("Select a payment method");
+ if(!address)return toast("Select a delivery address");
  const orderNo="SZC-"+Date.now().toString().slice(-8);
- try{await addDoc(collection(db,"orders"),{orderNo,userId:currentUser.uid,customerName:$("#cname").value,address:{line1:$("#cline").value,city:$("#ccity").value,district:$("#cdistrict").value,pincode:$("#cpin").value},items:cart,total,paymentMethod:pay,paymentStatus:"pending_verification",status:"Payment pending",createdAt:serverTimestamp()});cart=[];save();openDrawer(`<div class="account-box"><p class="eyebrow">ORDER CREATED</p><h2>${orderNo}</h2><p style="line-height:1.7;color:var(--muted)">Your order has been created and is awaiting verified payment. Connect your merchant UPI/payment provider before accepting live payments.</p><button class="btn btn-dark" style="width:100%" onclick="location.hash='home';location.reload()">Back to store</button></div>`)}
+ try{await addDoc(collection(db,"orders"),{orderNo,userId:currentUser.uid,customerName:address.name||currentUser.displayName||"",address:{label:address.label||"",name:address.name||"",line1:address.line1||"",line2:address.line2||"",city:address.city||"",district:address.district||"",state:address.state||"",pincode:address.pincode||""},addressId:address.id,items:cart,total,paymentMethod:pay,paymentStatus:"pending_verification",status:"Payment pending",createdAt:serverTimestamp()});cart=[];save();openDrawer(`<div class="account-box"><p class="eyebrow">ORDER CREATED</p><h2>${orderNo}</h2><p style="line-height:1.7;color:var(--muted)">Your order has been created and is awaiting verified payment. Connect your merchant UPI/payment provider before accepting live payments.</p><button class="btn btn-dark" style="width:100%" onclick="location.hash='home';location.reload()">Back to store</button></div>`)}
  catch(e){toast("Could not create order: "+e.message)}
 }
 
