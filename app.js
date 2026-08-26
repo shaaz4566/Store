@@ -16,6 +16,7 @@ async function loadFirebase(){
   }
 }
 const toast=(m)=>{const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2400)};
+let storeSettings={upiEnabled:true,gpayEnabled:true,cardEnabled:false,upiId:""};
 let products=[], cart=JSON.parse(localStorage.getItem("szc_cart")||"[]"), wishlist=JSON.parse(localStorage.getItem("szc_wishlist")||"[]"), currentUser=null;
 
 const fallback=[
@@ -26,8 +27,15 @@ const fallback=[
 ];
 
 async function loadProducts(){
- try{const snap=await getDocs(collection(db,"products"));products=snap.docs.map(d=>({id:d.id,...d.data()}));if(!products.length)products=fallback}
- catch(e){products=fallback}
+ try{
+  const [snap,settingsSnap]=await Promise.all([
+   getDocs(collection(db,"products")),
+   getDoc(doc(db,"settings","store"))
+  ]);
+  products=snap.docs.map(d=>({id:d.id,...d.data()}));
+  if(settingsSnap.exists())storeSettings={...storeSettings,...settingsSnap.data()};
+  if(!products.length)products=fallback;
+ }catch(e){products=fallback}
  renderAll();
 }
 function money(n){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(Number(n)||0)}
@@ -270,6 +278,15 @@ function cartDrawer(){
  openDrawer(`<div class="cart-box"><p class="eyebrow">YOUR BAG</p><h2>Ready when you are.</h2>${rows}<div class="line"><strong>Total</strong><strong>${money(total)}</strong></div><button class="btn btn-dark" id="checkout" style="width:100%">Continue to checkout</button></div>`);
  $$("[data-remove]").forEach(b=>b.onclick=()=>{cart=cart.filter(x=>x.id!==b.dataset.remove);save();cartDrawer()});$("#checkout").onclick=checkout;
 }
+async function availablePaymentMethods(){
+ const methods=[];
+ const cartProducts=cart.map(i=>products.find(p=>p.id===i.id)).filter(Boolean);
+ const allAllowUpi=cartProducts.every(p=>(p.paymentOptions||["upi"]).includes("upi"));
+ const allAllowCard=cartProducts.every(p=>(p.paymentOptions||["upi"]).includes("card"));
+ if(storeSettings.upiEnabled!==false && allAllowUpi)methods.push({value:"upi",label:storeSettings.gpayEnabled!==false?"UPI / Google Pay":"UPI"});
+ if(storeSettings.cardEnabled && allAllowCard)methods.push({value:"card",label:"Card"});
+ return methods;
+}
 async function checkout(){
  if(!currentUser){closeDrawer();account();toast("Sign in to continue");return}
  const addresses=await getSavedAddresses();
@@ -285,7 +302,10 @@ async function checkout(){
    <button class="text-link" id="manageCheckoutAddresses" type="button">Manage saved addresses</button>
    `:`<div class="notice-box">You need to add a delivery address before checkout.</div>
    <button class="btn" id="addCheckoutAddress" type="button">+ Add delivery address</button>`}
-   <select id="pay"><option value="">Select payment method</option><option value="upi">UPI / Google Pay</option></select>
+   <select id="pay"><option value="">Select payment method</option>
+   ${availablePaymentMethods().map(m=>`<option value="${m.value}">${m.label}</option>`).join("")}
+  </select>
+  <div id="paymentInfo" class="notice-box"></div>
    <div class="line"><strong>Total</strong><strong>${money(total)}</strong></div>
    <button class="btn btn-dark" id="place" ${addresses.length?"":"disabled"}>Place order</button>
    <small style="color:var(--muted)">Payment is only confirmed after a verified merchant payment flow. This storefront does not fake payment success.</small>
@@ -301,6 +321,15 @@ async function checkout(){
   $("#checkoutAddressPreview").innerHTML=a?`<strong>${escapeHtml(a.name||"")}</strong><br>${escapeHtml(addressText(a))}`:"";
  };
  updatePreview();
+ const paymentInfo=$("#paymentInfo");
+ const updatePaymentInfo=()=>{
+  const value=$("#pay").value;
+  paymentInfo.innerHTML=value==="upi" && storeSettings.upiId
+   ? `Pay using UPI / Google Pay to <strong>${escapeHtml(storeSettings.upiId)}</strong>. Payment will remain pending until verified.`
+   : value==="card" ? "Card payments require a configured merchant payment gateway and server-side verification." : "";
+ };
+ $("#pay").onchange=updatePaymentInfo;
+ updatePaymentInfo();
  $("#checkoutAddress").onchange=updatePreview;
  $("#manageCheckoutAddresses").onclick=()=>address();
  $("#place").onclick=()=>placeOrder(total,addresses.find(x=>x.id===$("#checkoutAddress").value));
