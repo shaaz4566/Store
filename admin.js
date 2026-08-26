@@ -31,8 +31,57 @@ async function reloadAndStay(){await loadData();enter();render();}
 
 function pageHeader(kicker,title,desc,actions=""){return `<div class="page-head"><div><p class="eyebrow">${kicker}</p><h1>${title}</h1><p class="mini-note">${desc}</p></div><div class="head-actions">${actions}</div></div>`}
 function setActive(){document.querySelectorAll(".nav-item").forEach(x=>x.classList.toggle("active",x.dataset.tab===currentTab))}
-function render(){if(!currentUser)return;enter();setActive();({dashboard,products:productsView,orders:ordersView,customers:customersView,settings:settingsView}[currentTab]||dashboard)()}
+function render(){
+  if(!currentUser)return;
+  enter();
+  setActive();
+  bindNavigation();
+  ({dashboard,products:productsView,orders:ordersView,customers:customersView,settings:settingsView}[currentTab]||dashboard)();
+  bindWorkspace();
+}
 function go(tab){currentTab=tab;render();window.scrollTo({top:0,behavior:"smooth"})}
+
+// Bind the static navigation directly. This avoids relying on dynamically
+// recreated document handlers for the main admin navigation.
+function bindNavigation(){
+  document.querySelectorAll(".nav-item[data-tab]").forEach(btn=>{
+    btn.onclick=()=>go(btn.dataset.tab);
+  });
+}
+
+// Bind every action inside the workspace after each render.
+function bindWorkspace(){
+  const view=$("#view");
+  if(!view) return;
+  view.querySelectorAll("[data-action]").forEach(el=>{
+    el.onclick=(event)=>{
+      event.preventDefault();
+      const action=el.dataset.action, id=el.dataset.id || "";
+      if(action==="status") return;
+      performAction(action,id);
+    };
+  });
+  view.querySelectorAll('select[data-action="status"]').forEach(el=>{
+    el.onchange=()=>performAction("status",el.dataset.id,el.value);
+  });
+}
+
+async function performAction(action,id="",value=""){
+  if(action==="products")return go("products");
+  if(action==="orders")return go("orders");
+  if(action==="settings")return go("settings");
+  if(action==="dashboard")return go("dashboard");
+  if(action==="add-product")return openProduct();
+  if(action==="view-product")return viewProduct(products.find(p=>p.id===id));
+  if(action==="edit-product"){closeModal();return openProduct(products.find(p=>p.id===id));}
+  if(action==="delete-product")return deleteProduct(id);
+  if(action==="preview-order")return previewOrder(orders.find(o=>o.id===id));
+  if(action==="refresh")return reloadAndStay();
+  if(action==="save-product")return saveProduct(id);
+  if(action==="save-shipping")return saveShipping(id);
+  if(action==="save-settings")return saveSettings();
+  if(action==="status")return updateStatus(id,value);
+}
 
 function dashboard(){
   const revenue=orders.filter(o=>String(o.paymentStatus||"").toLowerCase()==="paid").reduce((s,o)=>s+Number(o.total||0),0);
@@ -89,32 +138,14 @@ async function settingsView(){
 }
 async function saveSettings(){try{await setDoc(doc(db,"settings","store"),{storeName:$("#sName").value.trim(),upiId:$("#sUpi").value.trim(),upiName:$("#sUpiName").value.trim(),upiEnabled:$("#sUpiEnabled").checked,gpayEnabled:$("#sGpay").checked,cardEnabled:$("#sCard").checked,updatedAt:serverTimestamp()},{merge:true});await reloadAndStay();toast("Payment settings saved")}catch(e){toast(e.message||"Could not save settings")}}
 
-async function handleAction(e){
- const el=e.target.closest("[data-action]");if(!el)return;const action=el.dataset.action,id=el.dataset.id;
- if(action==="products")return go("products");
- if(action==="orders")return go("orders");
- if(action==="settings")return go("settings");
- if(action==="dashboard")return go("dashboard");
- if(action==="add-product")return openProduct();
- if(action==="view-product")return viewProduct(products.find(p=>p.id===id));
- if(action==="edit-product"){closeModal();return openProduct(products.find(p=>p.id===id));}
- if(action==="delete-product")return deleteProduct(id);
- if(action==="preview-order")return previewOrder(orders.find(o=>o.id===id));
- if(action==="refresh")return reloadAndStay();
- if(action==="save-product")return saveProduct(id||"");
- if(action==="save-shipping")return saveShipping(id);
- if(action==="save-settings")return saveSettings();
- if(action==="status")return updateStatus(id,el.value);
-}
-document.addEventListener("click",e=>{if(e.target.closest("[data-close-modal]")){e.preventDefault();closeModal();return}if(e.target.closest("select[data-action=\"status\"]"))return;handleAction(e)});
-document.addEventListener("change",e=>{const el=e.target.closest("select[data-action=\"status\"]");if(el)updateStatus(el.dataset.id,el.value)});
+async function handleAction(e){const el=e.target.closest("[data-action]");if(!el)return;return performAction(el.dataset.action,el.dataset.id||"",el.value||"")}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#modal").hidden)closeModal()});
 document.addEventListener("input",e=>{if(e.target.id!=="productSearch")return;const q=e.target.value.toLowerCase();document.querySelectorAll(".data-table tbody tr").forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q)?"":"none")});
 
 async function finishAuth(u){if(!u)return;if(u.uid!==ADMIN_UID){await signOut(auth).catch(()=>{});gate("Access denied: this Google account is not the SZC administrator.");return}currentUser=u;try{await loadData();render();toast("Admin access granted")}catch(e){console.error(e);gate();toast("Firestore error: "+(e.message||"Unable to load store data"))}}
 async function login(){try{const r=await signInWithPopup(auth,provider);await finishAuth(r.user)}catch(e){console.error(e);if(["auth/popup-blocked","auth/popup-closed-by-user"].includes(e?.code)){try{await signInWithRedirect(auth,provider)}catch(x){toast(x.message||"Google sign-in failed")}}else toast(e?.message||"Google sign-in failed")}}
 async function logout(){await signOut(auth).catch(()=>{});gate()}
-$("#pageLogin").addEventListener("click",login);$("#adminLogin").addEventListener("click",()=>currentUser?logout():login);
+$("#pageLogin").addEventListener("click",login);$("#adminLogin").addEventListener("click",()=>currentUser?logout():login);bindNavigation();
 $("#modal").addEventListener("click",e=>{if(e.target.classList.contains("modal-backdrop"))closeModal()});
 (async()=>{try{const r=await getRedirectResult(auth);if(r?.user)await finishAuth(r.user)}catch(e){console.error(e)}})();
 onAuthStateChanged(auth,async u=>{if(!u){gate();return}if(u.uid!==ADMIN_UID){await signOut(auth).catch(()=>{});gate("Access denied.");return}if(!currentUser)await finishAuth(u)});
