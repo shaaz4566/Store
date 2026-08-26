@@ -69,7 +69,7 @@ async function loadProducts(){
    getDocs(collection(db,"products")),
    getDoc(doc(db,"settings","store"))
   ]);
-  products=snap.docs.map(d=>({id:d.id,...d.data()}));
+  products=snap.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.managedByAdmin===true && p.published!==false);
   if(settingsSnap.exists())storeSettings={...storeSettings,...settingsSnap.data()};
   if(!products.length)products=[];
  }catch(e){products=[]}
@@ -78,12 +78,12 @@ async function loadProducts(){
 function money(n){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(Number(n)||0)}
 function card(p){
  const liked=wishlist.includes(p.id);
- return `<article class="product" data-id="${p.id}"><div class="product-image"><img loading="lazy" src="${p.image||fallback[0].image}" alt="${escapeHtml(p.name)}"><span class="product-badge">${p.badge||""}</span><button class="heart" data-heart="${p.id}" aria-label="Wishlist">${liked?"♥":"♡"}</button></div><div class="product-info"><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.category||"SZC")}</p><div class="price">${money(p.price)}</div></div></article>`
+ return `<article class="product" data-id="${p.id}"><div class="product-image"><img loading="lazy" src="${p.image||""}" alt="${escapeHtml(p.name)}"><span class="product-badge">${p.badge||""}</span><button class="heart" data-heart="${p.id}" aria-label="Wishlist">${liked?"♥":"♡"}</button></div><div class="product-info"><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.category||"SZC")}</p><div class="price">${money(p.price)}</div></div></article>`
 }
 function escapeHtml(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function renderAll(){
  const cats=[...new Set(products.map(p=>p.category).filter(Boolean))];
- $("#categoryGrid").innerHTML=(cats.length?cats:["Fashion","Accessories","Lifestyle","Everyday"]).slice(0,8).map((c,i)=>`<article class="category" data-cat="${escapeHtml(c)}"><p>0${i+1}</p><h3>${escapeHtml(c)}</h3><p>${products.filter(p=>p.category===c).length||"Explore"} pieces</p></article>`).join("");
+ $("#categoryGrid").innerHTML=cats.slice(0,8).map((c,i)=>`<article class="category" data-cat="${escapeHtml(c)}"><p>0${i+1}</p><h3>${escapeHtml(c)}</h3><p>${products.filter(p=>p.category===c).length||"Explore"} pieces</p></article>`).join("");
  $("#categoryFilter").innerHTML='<option value="">All categories</option>'+cats.map(c=>`<option>${escapeHtml(c)}</option>`).join("");
  const newP=products.filter(p=>p.badge==="NEW").slice(0,4);$("#newGrid").innerHTML=(newP.length?newP:products.slice(0,4)).map(card).join("");
  $("#bestGrid").innerHTML=products.filter(p=>p.featured).slice(0,4).map(card).join("")||products.slice(0,4).map(card).join("");
@@ -108,7 +108,7 @@ function bindCards(){
 }
 function openProduct(id){
  const p=products.find(x=>x.id===id);if(!p)return;
- $("#modalContent").innerHTML=`<div class="detail"><img src="${p.image||fallback[0].image}" alt="${escapeHtml(p.name)}"><div><p class="eyebrow">${escapeHtml(p.category||"SZC")}</p><h2>${escapeHtml(p.name)}</h2><div class="price">${money(p.price)}</div><p style="line-height:1.7;color:var(--muted)">${escapeHtml(p.description||"A considered SZC product.")}</p><div class="form"><button class="btn btn-dark" id="addProduct">Add to bag</button><button class="btn" id="wishProduct">♡ Save to wishlist</button></div></div></div>`;
+ $("#modalContent").innerHTML=`<div class="detail"><img src="${p.image||""}" alt="${escapeHtml(p.name)}"><div><p class="eyebrow">${escapeHtml(p.category||"SZC")}</p><h2>${escapeHtml(p.name)}</h2><div class="price">${money(p.price)}</div><p style="line-height:1.7;color:var(--muted)">${escapeHtml(p.description||"A considered SZC product.")}</p><div class="form"><button class="btn btn-dark" id="addProduct">Add to bag</button><button class="btn" id="wishProduct">♡ Save to wishlist</button></div></div></div>`;
  $("#modal").classList.add("open");$("#addProduct").onclick=()=>{addCart(p.id);closeModal()};$("#wishProduct").onclick=()=>toggleWish(p.id);
 }
 function addCart(id){const p=products.find(x=>x.id===id);if(!p)return;const x=cart.find(i=>i.id===id);x?x.qty++:cart.push({id,qty:1,name:p.name,price:Number(p.price)||0});save();toast("Added to bag");}
