@@ -1,3 +1,45 @@
+
+/* SZC welcome / scroll-to-enter */
+(function initWelcomeExperience(){
+  const screen=document.getElementById("welcomeScreen");
+  if(!screen)return;
+  document.body.classList.add("welcome-active");
+  let closed=false,startY=null;
+  const leave=()=>{
+    if(closed)return;
+    closed=true;
+    screen.classList.add("is-leaving");
+    document.body.classList.remove("welcome-active");
+    setTimeout(()=>screen.remove(),900);
+  };
+  screen.addEventListener("wheel",e=>{if(e.deltaY>8)leave()},{passive:true});
+  screen.addEventListener("touchstart",e=>{startY=e.touches[0]?.clientY??null},{passive:true});
+  screen.addEventListener("touchmove",e=>{
+    if(startY===null)return;
+    const y=e.touches[0]?.clientY??startY;
+    if(startY-y>14)leave();
+  },{passive:true});
+  screen.addEventListener("pointerdown",e=>{if(e.pointerType==="mouse")startY=e.clientY});
+  screen.addEventListener("pointermove",e=>{
+    if(e.pointerType==="mouse"&&startY!==null&&startY-e.clientY>14)leave();
+  });
+  screen.addEventListener("keydown",e=>{
+    if(["ArrowDown","PageDown"," ","Enter"].includes(e.key))leave();
+  });
+  screen.tabIndex=0;
+  screen.focus({preventScroll:true});
+  setTimeout(leave,7000);
+})();
+
+function updateScrollMotion(){
+  const y=Math.min(window.scrollY||0,900);
+  const heroCopy=document.querySelector(".hero-copy");
+  const heroArt=document.querySelector(".hero-art");
+  if(heroCopy)heroCopy.style.transform=`translate3d(0,${y*0.035}px,0)`;
+  if(heroArt)heroArt.style.transform=`translate3d(0,${y*0.07}px,0)`;
+}
+window.addEventListener("scroll",updateScrollMotion,{passive:true});
+
 let auth,provider,db,signInWithPopup,signOut,onAuthStateChanged,collection,getDocs,getDoc,doc,setDoc,addDoc,deleteDoc,query,orderBy,where,serverTimestamp;
 let firebaseReady = false;
 
@@ -19,7 +61,12 @@ const toast=(m)=>{const t=$("#toast");t.textContent=m;t.classList.add("show");se
 let storeSettings={upiEnabled:true,gpayEnabled:true,cardEnabled:false,upiId:""};
 let products=[], cart=JSON.parse(localStorage.getItem("szc_cart")||"[]"), wishlist=JSON.parse(localStorage.getItem("szc_wishlist")||"[]"), currentUser=null;
 
-
+const fallback=[
+{id:"sample1",name:"Everyday Overshirt",category:"Fashion",price:1499,image:"https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=900&q=80",badge:"NEW",description:"A relaxed everyday layer with a clean, modern silhouette.",featured:true},
+{id:"sample2",name:"Studio Tote",category:"Accessories",price:899,image:"https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=900&q=80",badge:"BEST",description:"A spacious carry-all for everyday movement.",featured:true},
+{id:"sample3",name:"Minimal Runner",category:"Footwear",price:2299,image:"https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80",badge:"NEW",description:"An understated everyday sneaker.",featured:false},
+{id:"sample4",name:"Object No. 04",category:"Lifestyle",price:699,image:"https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80",badge:"",description:"A considered object for your everyday setup.",featured:true}
+];
 
 async function loadProducts(){
  try{
@@ -29,14 +76,14 @@ async function loadProducts(){
   ]);
   products=snap.docs.map(d=>({id:d.id,...d.data()}));
   if(settingsSnap.exists())storeSettings={...storeSettings,...settingsSnap.data()};
-  if(!products.length)products=[];
- }catch(e){console.error("Product loading failed:",e);products=[]}
+  if(!products.length)products=fallback;
+ }catch(e){products=fallback}
  renderAll();
 }
 function money(n){return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(Number(n)||0)}
 function card(p){
  const liked=wishlist.includes(p.id);
- return `<article class="product" data-id="${p.id}"><div class="product-image"><img loading="lazy" src="${p.image||"data:image/svg+xml;charset=UTF-8,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 width%3D%22900%22 height%3D%221100%22 viewBox%3D%220 0 900 1100%22%3E%3Crect width%3D%22900%22 height%3D%221100%22 fill%3D%22%23eee9df%22%2F%3E%3Ctext x%3D%22450%22 y%3D%22550%22 text-anchor%3D%22middle%22 dominant-baseline%3D%22middle%22 font-family%3D%22Arial%22 font-size%3D%2240%22 fill%3D%22%23756b5e%22%3ESZC%3C%2Ftext%3E%3C%2Fsvg%3E"}" alt="${escapeHtml(p.name)}"><span class="product-badge">${p.badge||""}</span><button class="heart" data-heart="${p.id}" aria-label="Wishlist">${liked?"♥":"♡"}</button></div><div class="product-info"><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.category||"SZC")}</p><div class="price">${money(p.price)}</div></div></article>`
+ return `<article class="product" data-id="${p.id}"><div class="product-image"><img loading="lazy" src="${p.image||fallback[0].image}" alt="${escapeHtml(p.name)}"><span class="product-badge">${p.badge||""}</span><button class="heart" data-heart="${p.id}" aria-label="Wishlist">${liked?"♥":"♡"}</button></div><div class="product-info"><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.category||"SZC")}</p><div class="price">${money(p.price)}</div></div></article>`
 }
 function escapeHtml(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function renderAll(){
@@ -66,7 +113,7 @@ function bindCards(){
 }
 function openProduct(id){
  const p=products.find(x=>x.id===id);if(!p)return;
- $("#modalContent").innerHTML=`<div class="detail"><img src="${p.image||"data:image/svg+xml;charset=UTF-8,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 width%3D%22900%22 height%3D%221100%22 viewBox%3D%220 0 900 1100%22%3E%3Crect width%3D%22900%22 height%3D%221100%22 fill%3D%22%23eee9df%22%2F%3E%3Ctext x%3D%22450%22 y%3D%22550%22 text-anchor%3D%22middle%22 dominant-baseline%3D%22middle%22 font-family%3D%22Arial%22 font-size%3D%2240%22 fill%3D%22%23756b5e%22%3ESZC%3C%2Ftext%3E%3C%2Fsvg%3E"}" alt="${escapeHtml(p.name)}"><div><p class="eyebrow">${escapeHtml(p.category||"SZC")}</p><h2>${escapeHtml(p.name)}</h2><div class="price">${money(p.price)}</div><p style="line-height:1.7;color:var(--muted)">${escapeHtml(p.description||"A considered SZC product.")}</p><div class="form"><button class="btn btn-dark" id="addProduct">Add to bag</button><button class="btn" id="wishProduct">♡ Save to wishlist</button></div></div></div>`;
+ $("#modalContent").innerHTML=`<div class="detail"><img src="${p.image||fallback[0].image}" alt="${escapeHtml(p.name)}"><div><p class="eyebrow">${escapeHtml(p.category||"SZC")}</p><h2>${escapeHtml(p.name)}</h2><div class="price">${money(p.price)}</div><p style="line-height:1.7;color:var(--muted)">${escapeHtml(p.description||"A considered SZC product.")}</p><div class="form"><button class="btn btn-dark" id="addProduct">Add to bag</button><button class="btn" id="wishProduct">♡ Save to wishlist</button></div></div></div>`;
  $("#modal").classList.add("open");$("#addProduct").onclick=()=>{addCart(p.id);closeModal()};$("#wishProduct").onclick=()=>toggleWish(p.id);
 }
 function addCart(id){const p=products.find(x=>x.id===id);if(!p)return;const x=cart.find(i=>i.id===id);x?x.qty++:cart.push({id,qty:1,name:p.name,price:Number(p.price)||0});save();toast("Added to bag");}

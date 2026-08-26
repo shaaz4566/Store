@@ -7,3 +7,26 @@ body.dark{--paper:#151712;--ink:#f2eee5;--cream:#22231e;--line:#393a34;--muted:#
 .saved-addresses{display:grid;gap:10px;margin-top:20px}.saved-address{border:1px solid var(--line);padding:16px;background:var(--paper)}.saved-address.default{border-color:var(--green)}.address-top{display:flex;align-items:center;gap:8px}.address-default{font-size:8px;letter-spacing:.12em;background:var(--green);color:#f5f0e7;padding:4px 6px;border-radius:999px}.saved-address small{display:block;color:var(--muted);margin-top:5px}.saved-address p{font-size:12px;line-height:1.6;color:var(--muted);margin:8px 0 12px}.address-actions{display:flex;gap:12px;flex-wrap:wrap}.danger-link{color:#9a3d32}.field-label{font-size:11px;font-weight:700;color:var(--muted)}.check-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}.check-row input{width:auto}.checkout-address{border:1px solid var(--line);padding:13px;font-size:12px;line-height:1.6;color:var(--muted)}.notice-box{border:1px solid var(--line);padding:14px;font-size:12px;color:var(--muted)}
 
 .order-history{display:grid;gap:8px}.order-history-card{width:100%;border:1px solid var(--line);background:var(--paper);color:inherit;padding:15px;display:grid;grid-template-columns:1fr auto auto;gap:15px;text-align:left;align-items:center;cursor:pointer}.order-history-card:hover{background:var(--cream)}.order-history-card span:first-child{display:grid;gap:5px}.order-history-card small{color:var(--muted)}.order-status-box{border:1px solid var(--line);padding:14px;margin:15px 0;display:flex;justify-content:space-between;gap:15px}.order-status-box small{color:var(--muted)}.account-box h3{margin:25px 0 10px}
+
+/* SZC welcome / pull-to-enter */
+body.welcome-active{overflow:hidden}
+.welcome-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:var(--ink);color:var(--paper);transform:translateY(0);transition:transform .85s cubic-bezier(.76,0,.24,1),opacity .55s ease;touch-action:none}
+.welcome-screen.is-leaving{transform:translateY(-100%);opacity:.98}
+.welcome-inner{width:min(900px,88vw);min-height:100vh;display:flex;flex-direction:column;justify-content:center;position:relative;padding:60px 0}
+.welcome-mark{position:absolute;top:42px;left:0;font:800 34px/1 Manrope,sans-serif;letter-spacing:-.1em}
+.welcome-inner .eyebrow{color:rgba(255,255,255,.52);margin-bottom:20px}
+.welcome-inner h1{font:800 clamp(52px,9vw,120px)/.86 Manrope,sans-serif;letter-spacing:-.075em;margin:0}
+.welcome-inner h1 em{font-family:Georgia,serif;font-weight:400}
+.welcome-copy{color:rgba(255,255,255,.62);font-size:14px;margin:28px 0 0}
+.welcome-pull{position:absolute;left:0;bottom:42px;display:flex;align-items:center;gap:12px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.58)}
+.welcome-line{display:block;width:46px;height:1px;background:rgba(255,255,255,.45)}
+.welcome-arrow{font-size:18px;line-height:1;animation:welcomeFloat 1.5s ease-in-out infinite}
+@keyframes welcomeFloat{0%,100%{transform:translateY(-3px)}50%{transform:translateY(5px)}}
+.hero-copy,.hero-art{transition:transform .2s linear}
+.hero-art{will-change:transform}
+.category,.product-card,.promo,.review-grid article{transition:transform .45s cubic-bezier(.2,.8,.2,1),box-shadow .45s ease}
+.category:hover,.product-card:hover{transform:translateY(-7px)}
+.review-grid article:hover{transform:translateY(-5px);box-shadow:var(--shadow)}
+.footer-bottom a{text-decoration:none;border-bottom:1px solid currentColor;padding-bottom:2px}
+@media(max-width:850px){.welcome-inner{width:86vw}.welcome-mark{top:28px}.welcome-pull{bottom:28px}}
+@media(prefers-reduced-motion:reduce){.welcome-screen,.hero-copy,.hero-art,.category,.product-card,.promo,.review-grid article{transition:none}.welcome-arrow{animation:none}}
