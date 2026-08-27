@@ -354,7 +354,7 @@ async function checkout(){
    `:`<div class="notice-box">You need to add a delivery address before checkout.</div>
    <button class="btn" id="addCheckoutAddress" type="button">+ Add delivery address</button>`}
    <select id="pay"><option value="">Select payment method</option>
-   ${availablePaymentMethods().map(m=>`<option value="${m.value}">${m.label}</option>`).join("")}
+   ${(await availablePaymentMethods()).map(m=>`<option value="${m.value}">${m.label}</option>`).join("")}
   </select>
   <div id="paymentInfo" class="notice-box"></div>
    <div class="line"><strong>Total</strong><strong>${money(total)}</strong></div>
