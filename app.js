@@ -376,7 +376,7 @@ async function checkout(){
  const updatePaymentInfo=()=>{
   const value=$("#pay").value;
   paymentInfo.innerHTML=value==="upi" && storeSettings.upiId
-   ? `Pay using UPI / Google Pay to <strong>${escapeHtml(storeSettings.upiId)}</strong>. Payment will remain pending until verified.`
+   ? `Pay using UPI / Google Pay to <strong>${escapeHtml(storeSettings.upiId)}</strong>. After placing the order, SZC Store will open your UPI app with the exact order amount. Payment remains pending until verified.`
    : value==="card" ? "Card payments require a configured merchant payment gateway and server-side verification." : "";
  };
  $("#pay").onchange=updatePaymentInfo;
@@ -386,6 +386,12 @@ async function checkout(){
  $("#place").onclick=()=>placeOrder(total,addresses.find(x=>x.id===$("#checkoutAddress").value));
 }
 
+function buildUpiUri(total,orderNo){
+ const pa=String(storeSettings.upiId||"").trim();
+ const pn=String(storeSettings.upiName||storeSettings.storeName||"SZC Store").trim();
+ if(!pa)return "";
+ return `upi://pay?pa=${encodeURIComponent(pa)}&pn=${encodeURIComponent(pn)}&am=${encodeURIComponent(Number(total).toFixed(2))}&cu=INR&tn=${encodeURIComponent(`SZC Store ${orderNo}`)}`;
+}
 async function placeOrder(total,address){
  const pay=$("#pay").value;if(!pay)return toast("Select a payment method");
  if(!address)return toast("Select a delivery address");
@@ -405,7 +411,12 @@ async function placeOrder(total,address){
    createdAt:serverTimestamp(),updatedAt:serverTimestamp()
   });
   cart=[];save();
-  openDrawer(`<div class="account-box"><p class="eyebrow">ORDER CREATED</p><h2>${orderNo}</h2><p style="line-height:1.7;color:var(--muted)">Your order has been created. You can follow its status and shipping details from your account.</p><button class="btn btn-dark" id="viewCreatedOrder" style="width:100%">View my orders</button></div>`);
+  const upiUri=pay==="upi"?buildUpiUri(total,orderNo):"";
+  openDrawer(`<div class="account-box"><p class="eyebrow">ORDER CREATED</p><h2>${orderNo}</h2><p style="line-height:1.7;color:var(--muted)">Your order is saved. Complete the UPI payment in your selected UPI app. The order stays pending until the payment is actually verified.</p>${upiUri?`<button class="btn btn-dark" id="payNow" style="width:100%">Pay ₹${Number(total).toFixed(2)} through UPI app</button><button class="btn" id="copyUpi" style="width:100%;margin-top:8px">Copy UPI payment link</button>`:""}<button class="btn" id="viewCreatedOrder" style="width:100%;margin-top:8px">View my orders</button></div>`);
+  if(upiUri){
+   $("#payNow").onclick=()=>{window.location.href=upiUri};
+   $("#copyUpi").onclick=async()=>{try{await navigator.clipboard.writeText(upiUri);toast("UPI payment link copied")}catch{toast("Could not copy the UPI link")}};
+  }
   $("#viewCreatedOrder").onclick=orders;
  }catch(e){toast("Could not create order: "+e.message)}
 }

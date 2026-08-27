@@ -183,6 +183,7 @@ async function settingsView(){
    <div class="field full"><label>Store name</label><input id="sName" value="${esc(settings.storeName||"SZC Store")}"></div>
    <div class="field"><label>Merchant UPI ID</label><input id="sUpi" value="${esc(settings.upiId||"")}" placeholder="name@upi"></div>
    <div class="field"><label>UPI display name</label><input id="sUpiName" value="${esc(settings.upiName||"SZC Store")}"></div>
+   <div class="field full"><label>Payment verification endpoint (optional)</label><input id="sVerifyUrl" value="${esc(settings.paymentVerificationUrl||"")}" placeholder="Add your secure provider verification endpoint later"><small class="mini-note">Leave empty until you have a real merchant verification service. Do not put secret API keys in this field.</small></div>
    <div class="field full"><div class="check-panel">
     <label><input id="sUpiEnabled" type="checkbox" ${settings.upiEnabled!==false?"checked":""}> Enable UPI / Google Pay</label>
     <label><input id="sGpay" type="checkbox" ${settings.gpayEnabled!==false?"checked":""}> Show Google Pay</label>
@@ -230,7 +231,7 @@ async function settingsView(){
   try{await setDoc(doc(db,"settings","store"),{features:[...new Set(values)],updatedAt:serverTimestamp()},{merge:true});await reloadAndStay();toast("Features saved")}catch(e){toast(e.message||"Could not save features")}
  };
 }
-async function saveSettings(){try{await setDoc(doc(db,"settings","store"),{storeName:$("#sName").value.trim(),upiId:$("#sUpi").value.trim(),upiName:$("#sUpiName").value.trim(),upiEnabled:$("#sUpiEnabled").checked,gpayEnabled:$("#sGpay").checked,cardEnabled:$("#sCard").checked,updatedAt:serverTimestamp()},{merge:true});await reloadAndStay();toast("Payment settings saved")}catch(e){toast(e.message||"Could not save settings")}}
+async function saveSettings(){try{await setDoc(doc(db,"settings","store"),{storeName:$("#sName").value.trim(),upiId:$("#sUpi").value.trim(),upiName:$("#sUpiName").value.trim(),paymentVerificationUrl:$("#sVerifyUrl").value.trim(),upiEnabled:$("#sUpiEnabled").checked,gpayEnabled:$("#sGpay").checked,cardEnabled:$("#sCard").checked,updatedAt:serverTimestamp()},{merge:true});await reloadAndStay();toast("Payment settings saved")}catch(e){toast(e.message||"Could not save settings")}}
 
 async function handleAction(e){const el=e.target.closest("[data-action]");if(!el)return;return performAction(el.dataset.action,el.dataset.id||"",el.value||"")}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#modal").hidden)closeModal()});

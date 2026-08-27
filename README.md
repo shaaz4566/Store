@@ -59,3 +59,9 @@ For production, keep Firestore Rules as the final authorization boundary.
 
 ## Admin interaction fix (v9)
 Admin navigation, product View/Edit/Delete, order Preview, payment product editing, and modal closing use delegated click handling so they continue to work after each dashboard re-render.
+
+
+## Real UPI payment flow
+The storefront now creates a real pending Firestore order and builds a standard UPI payment intent containing the merchant VPA, exact INR amount, and order reference. On supported devices, “Pay through UPI app” opens the installed UPI app.
+
+Automatic `PAID` verification still requires the merchant/payment provider's server-side verification API or webhook. A GitHub Pages frontend must not contain provider secrets. Add the secure verification endpoint later in Admin → Payment & Store. Until that is configured, orders remain `pending_verification` rather than falsely being marked paid.
