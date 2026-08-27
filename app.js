@@ -63,21 +63,7 @@ let products=[], cart=JSON.parse(localStorage.getItem("szc_cart")||"[]"), wishli
 
 
 
-
-function getEmbeddedCatalogue(){
- try{
-  const el=document.getElementById("szc-catalogue-data");
-  if(!el)return null;
-  const data=JSON.parse(el.textContent||"{}");
-  if(!Array.isArray(data.products))return null;
-  return data;
- }catch(e){console.warn("Embedded catalogue unavailable",e);return null}
-}
-
 async function loadProducts(){
- const embeddedAtStart=getEmbeddedCatalogue();
- if(embeddedAtStart && window.location.protocol==="file:"){ products=embeddedAtStart.products; settings={...settings,...(embeddedAtStart.settings||{})}; return; }
-
  try{
   const [snap,settingsSnap]=await Promise.all([
    getDocs(collection(db,"products")),
