@@ -227,8 +227,10 @@ async function exportStoreIndex(){
   // It keeps Firebase code in the normal app and embeds a catalogue snapshot
   // so product/category images are present in the exported HTML.
   const indexPath="${root.name}";
-  const existing=await fetch("index.html",{cache:"no-store"}).then(r=>r.ok?r.text():"").catch(()=> "");
-  if(!existing)throw new Error("Open the admin page from the same GitHub folder as index.html before exporting.");
+  const existing=await fetch(new URL("index.html",location.href),{cache:"no-store"}).then(async r=>{
+    if(!r.ok) throw new Error(`Could not load index.html (${r.status}). Make sure admin.html and index.html are in the same GitHub folder.`);
+    return await r.text();
+  });
 
   const markerStart="<!-- SZC_CATALOGUE_START -->";
   const markerEnd="<!-- SZC_CATALOGUE_END -->";
