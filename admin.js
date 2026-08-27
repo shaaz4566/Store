@@ -110,7 +110,7 @@ function dashboard(){
   const pending=orders.filter(o=>["Payment pending","Processing","Shipped","Out for delivery"].includes(o.status)).length;
   $("#view").innerHTML=`${pageHeader("OVERVIEW","Good day, SZC.","Run your catalogue, orders, customers and payments from here.",`<button class="primary" data-action="add-product">+ Add product</button>`)}
   <div class="stats"><div class="stat"><b>${products.length}</b><span>Products</span></div><div class="stat"><b>${orders.length}</b><span>Orders</span></div><div class="stat"><b>${money(revenue)}</b><span>Verified revenue</span></div><div class="stat"><b>${pending}</b><span>Needs attention</span></div></div>
- <div class="section-card"><div class="section-title"><h2>Store management</h2></div><div class="quick-actions">
+  <div class="section-card"><div class="section-title"><h2>Store management</h2></div><div class="quick-actions">
    <button class="quick-action" data-action="products"><strong>Products →</strong><span>View catalogue, add products, edit details and remove products.</span></button>
    <button class="quick-action" data-action="orders"><strong>Orders →</strong><span>Preview every order, address, payment and shipping information.</span></button>
    <button class="quick-action" data-action="settings"><strong>Payment & Store →</strong><span>Configure UPI, Google Pay, card and product payment options.</span></button>
