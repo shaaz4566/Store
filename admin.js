@@ -149,7 +149,7 @@ function productFields(p={}){
   </div>
   <div class="field"><label>Price (₹)</label><input id="pPrice" type="number" min="0" value="${p.price??""}"></div>
   <div class="field"><label>Stock</label><input id="pStock" type="number" min="0" value="${p.stock??0}"></div>
-  <div class="field full"><label>Product photo</label><input id="pImageFile" type="file" accept="image/*"><small class="mini-note">Choose a photo from your device. It will be uploaded to Firebase Storage.</small><input id="pImage" value="${esc(p.image)}" placeholder="Or paste an image URL"></div>
+  <div class="field full"><label>Product photo</label><input id="pImageFile" type="file" accept="image/*"><small class="mini-note">Choose a photo from your device. It will be uploaded to Firebase Storage and saved to Firestore.</small><input id="pImage" value="${esc(p.image)}" placeholder="Or paste an image URL"></div>
   <div class="field"><label>Badge</label><input id="pBadge" value="${esc(p.badge)}" placeholder="NEW / SALE"></div>
   <div class="field"><label>Product type</label><select id="pFeatured"><option value="false" ${!p.featured?"selected":""}>Standard</option><option value="true" ${p.featured?"selected":""}>Featured</option></select></div>
   <div class="field full"><label>Product features</label>
@@ -197,6 +197,7 @@ async function customersView(){
  $("#view").innerHTML=`${pageHeader("CUSTOMERS","Customers.","Customer accounts, order history and every saved delivery address.")}<div class="section-card"><div class="empty-state">Loading customers…</div></div>`;
  try{const snap=await getDocs(collection(db,"users"));const users=await Promise.all(snap.docs.map(async d=>{const as=await getDocs(collection(db,"users",d.id,"addresses")).catch(()=>({docs:[]}));return{id:d.id,...d.data(),addresses:as.docs.map(x=>({id:x.id,...x.data()})),orders:orders.filter(o=>o.userId===d.id)}}));$("#view").innerHTML=`${pageHeader("CUSTOMERS","Customers.","Customer accounts, order history and every saved delivery address.")}<div class="section-card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Customer</th><th>Email</th><th>Orders</th><th>Saved addresses</th></tr></thead><tbody>${users.map(u=>`<tr><td><strong>${esc(u.displayName||"Customer")}</strong><div class="product-meta">UID ${esc(u.id)}</div></td><td>${esc(u.email||"—")}</td><td>${u.orders.length}</td><td><div class="address-list">${u.addresses.map(a=>`<div class="address-row"><strong>${esc(a.label||"Address")}</strong> ${a.isDefault?`<span class="status green">Default</span>`:""}<div class="mini-note">${esc([a.name,a.line1,a.line2,a.city,a.district,a.state,a.pincode].filter(Boolean).join(", "))}</div></div>`).join("")||`<span class="mini-note">No saved addresses.</span>`}</div></td></tr>`).join("")||`<tr><td colspan="4"><div class="empty-state">No customers yet.</div></td></tr>`}</tbody></table></div></div>`}catch(e){console.error(e);toast("Could not load customers")}
 }
+
 async function settingsView(){
  const categories=Array.isArray(settings.categories)?settings.categories:[];
  const features=Array.isArray(settings.features)?settings.features:[];
@@ -256,6 +257,8 @@ async function settingsView(){
    await reloadAndStay();toast("Categories and photos saved");
   }catch(e){console.error(e);toast(e.message||"Could not save categories")}
  };
+
+ 
 
  $("#saveFeatures").onclick=async()=>{
   const values=[...document.querySelectorAll(".catalog-feature")].map(x=>x.value.trim()).filter(Boolean);
