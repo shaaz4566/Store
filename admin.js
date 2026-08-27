@@ -1,7 +1,7 @@
 import {
   auth, provider, db, signInWithPopup, signInWithRedirect, getRedirectResult,
   signOut, onAuthStateChanged, collection, getDocs, getDoc, addDoc,
-  doc, setDoc, updateDoc, deleteDoc, where, query, serverTimestamp
+  doc, setDoc, updateDoc, deleteDoc, where, query, serverTimestamp, storage, ref, uploadBytes, getDownloadURL
 } from "./firebase.js";
 
 const ADMIN_UID = "ihSDHUk86DY8McVcLN7gjzt96Bm1";
@@ -12,6 +12,16 @@ const dateText = ts => { try { return ts ? new Date((ts.seconds||0)*1000).toLoca
 let products=[], orders=[], settings={}, currentTab="dashboard", currentUser=null, toastTimer;
 
 function toast(message){const el=$("#toast"); if(!el)return; el.textContent=message; el.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2800)}
+async function uploadAdminImage(file,folder){
+ if(!file)return "";
+ if(!file.type.startsWith("image/"))throw new Error("Please choose an image file.");
+ if(file.size>5*1024*1024)throw new Error("Image must be 5 MB or smaller.");
+ const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"-");
+ const storageRef=ref(storage,`admin-uploads/${folder}/${Date.now()}-${crypto.randomUUID()}-${safeName}`);
+ await uploadBytes(storageRef,file,{contentType:file.type,cacheControl:"public,max-age=31536000"});
+ return await getDownloadURL(storageRef);
+}
+
 function bindModalActions(){
   const modal=$("#modal");
   if(!modal)return;
@@ -139,7 +149,7 @@ function productFields(p={}){
   </div>
   <div class="field"><label>Price (₹)</label><input id="pPrice" type="number" min="0" value="${p.price??""}"></div>
   <div class="field"><label>Stock</label><input id="pStock" type="number" min="0" value="${p.stock??0}"></div>
-  <div class="field full"><label>Image URL</label><input id="pImage" value="${esc(p.image)}" placeholder="https://…"></div>
+  <div class="field full"><label>Product photo</label><input id="pImageFile" type="file" accept="image/*"><small class="mini-note">Choose a photo from your device. It will be uploaded to Firebase Storage.</small><input id="pImage" value="${esc(p.image)}" placeholder="Or paste an image URL"></div>
   <div class="field"><label>Badge</label><input id="pBadge" value="${esc(p.badge)}" placeholder="NEW / SALE"></div>
   <div class="field"><label>Product type</label><select id="pFeatured"><option value="false" ${!p.featured?"selected":""}>Standard</option><option value="true" ${p.featured?"selected":""}>Featured</option></select></div>
   <div class="field full"><label>Product features</label>
@@ -157,9 +167,23 @@ function productFields(p={}){
 function openProduct(p={}){showModal(`<button type="button" class="modal-close" data-close-modal>×</button><p class="eyebrow">${p.id?"EDIT PRODUCT":"ADD PRODUCT"}</p><h2>${p.id?"Edit product":"Add a new product"}</h2><p class="mini-note">Changes are saved directly to Firestore.</p><div style="margin-top:20px">${productFields(p)}</div><div class="form-actions"><button type="button" class="secondary" data-close-modal>Cancel</button><button type="button" class="primary" data-action="save-product" data-id="${esc(p.id||"")}">${p.id?"Save changes":"Create product"}</button></div>`) }
 function viewProduct(p){if(!p)return;showModal(`<button type="button" class="modal-close" data-close-modal>×</button><div class="product-cell"><div class="product-thumb empty" style="width:80px;height:95px">${p.image?`<img src="${esc(p.image)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:7px">`:"NO IMAGE"}</div><div><p class="eyebrow">PRODUCT</p><h2>${esc(p.name)}</h2><p class="mini-note">${esc(p.category||"Uncategorised")}</p></div></div><div class="preview-grid"><div class="preview-box"><h4>Price</h4><strong>${money(p.price)}</strong></div><div class="preview-box"><h4>Stock</h4><strong>${p.stock??0}</strong></div><div class="preview-box"><h4>Payment</h4><strong>${(p.paymentOptions||["upi"]).map(x=>esc(x.toUpperCase())).join(" / ")}</strong></div><div class="preview-box"><h4>Type</h4><strong>${p.featured?"Featured":"Standard"}</strong></div></div><div class="preview-box" style="margin-top:12px"><h4>Description</h4><div class="mini-note">${esc(p.description||"No description")}</div></div><div class="form-actions"><button class="secondary" data-close-modal>Close</button><button class="primary" data-action="edit-product" data-id="${esc(p.id)}">Edit product</button></div>`)}
 
-async function saveProduct(id){const payment=[];if($("#pUpi").checked)payment.push("upi");if($("#pCard").checked)payment.push("card");const features=[...document.querySelectorAll(".pFeature:checked")].map(x=>x.value);const data={name:$("#pName").value.trim(),category:$("#pCategory").value.trim(),features,managedByAdmin:true,published:true,price:Number($("#pPrice").value),stock:Number($("#pStock").value||0),image:$("#pImage").value.trim(),badge:$("#pBadge").value.trim(),featured:$("#pFeatured").value==="true",paymentOptions:payment,description:$("#pDescription").value.trim(),updatedAt:serverTimestamp()};if(!data.name||!Number.isFinite(data.price)||data.price<0)return toast("Enter a valid product name and price");if(!payment.length)return toast("Select at least one payment method");try{if(id)await updateDoc(doc(db,"products",id),data);else await addDoc(collection(db,"products"),{...data,createdAt:serverTimestamp()});closeModal();await reloadAndStay();toast(id?"Product updated":"Product added")}catch(e){console.error(e);toast(e.message||"Could not save product")}}
-async function deleteProduct(id){const p=products.find(x=>x.id===id);if(!p||!confirm(`Delete “${p.name}”?`))return;try{await deleteDoc(doc(db,"products",id));await reloadAndStay();toast("Product deleted")}catch(e){toast(e.message||"Could not delete product")}}
-
+async function saveProduct(id){
+ const payment=[];
+ if($("#pUpi").checked)payment.push("upi");
+ if($("#pCard").checked)payment.push("card");
+ const features=[...document.querySelectorAll(".pFeature:checked")].map(x=>x.value);
+ const file=$("#pImageFile")?.files?.[0];
+ let image=$("#pImage").value.trim();
+ if(!$("#pName").value.trim()||!Number.isFinite(Number($("#pPrice").value))||Number($("#pPrice").value)<0)return toast("Enter a valid product name and price");
+ if(!payment.length)return toast("Select at least one payment method");
+ try{
+  if(file){toast("Uploading product photo…");image=await uploadAdminImage(file,"products")}
+  const data={name:$("#pName").value.trim(),category:$("#pCategory").value.trim(),features,managedByAdmin:true,published:true,price:Number($("#pPrice").value),stock:Number($("#pStock").value||0),image,badge:$("#pBadge").value.trim(),featured:$("#pFeatured").value==="true",paymentOptions:payment,description:$("#pDescription").value.trim(),updatedAt:serverTimestamp()};
+  if(id)await updateDoc(doc(db,"products",id),data);
+  else await addDoc(collection(db,"products"),{...data,createdAt:serverTimestamp()});
+  closeModal();await reloadAndStay();toast(id?"Product updated":"Product added");
+ }catch(e){console.error(e);toast(e.message||"Could not save product")}
+}
 function addressHtml(a={}){if(!a||!Object.keys(a).length)return `<span class="mini-note">No delivery address stored.</span>`;return `<strong>${esc(a.name||"Customer")}</strong><div class="mini-note">${esc([a.line1,a.line2,a.city,a.district,a.state,a.pincode].filter(Boolean).join(", "))}<br>${esc(a.phone||"")}</div>`}
 function ordersView(){
  const cards=orders.map(o=>`<article class="order-card"><div class="order-top"><div><div class="order-id">${esc(o.orderNo||o.id)}</div><div class="order-customer">${esc(o.customerName||"Customer")} · ${esc(o.userEmail||"")} · ${dateText(o.createdAt)}</div></div><div class="order-total">${money(o.total)}</div></div><div class="order-actions"><span class="status">${esc(o.status||"Payment pending")}</span><span class="status">${esc(o.paymentMethod||"UPI")} · ${esc(o.paymentStatus||"pending")}</span><button class="primary" data-action="preview-order" data-id="${esc(o.id)}">Preview full order</button><select data-action="status" data-id="${esc(o.id)}">${["Payment pending","Paid","Processing","Shipped","Out for delivery","Delivered","Cancelled"].map(x=>`<option value="${esc(x)}" ${o.status===x?"selected":""}>${x}</option>`).join("")}</select></div><div class="order-body"><div class="order-box"><h4>Products ordered</h4>${Array.isArray(o.items)&&o.items.length?o.items.map(i=>`<div class="order-item"><span>${esc(i.name||"Product")} × ${Number(i.qty)||1}</span><strong>${money((Number(i.price)||0)*(Number(i.qty)||1))}</strong></div>`).join(""):"<span class='mini-note'>No product snapshot found.</span>"}</div><div class="order-box"><h4>Delivery address</h4>${addressHtml(o.address)}</div></div><div class="shipping-grid"><label>Courier<input data-carrier="${esc(o.id)}" value="${esc(o.shipping?.carrier||"")}" placeholder="Delhivery, DTDC…"></label><label>Tracking number<input data-tracking="${esc(o.id)}" value="${esc(o.shipping?.trackingNumber||"")}" placeholder="Tracking ID"></label></div><div class="order-actions"><button class="primary" data-action="save-shipping" data-id="${esc(o.id)}">Save shipping details</button></div></article>`).join("");
@@ -176,14 +200,15 @@ async function customersView(){
 async function settingsView(){
  const categories=Array.isArray(settings.categories)?settings.categories:[];
  const features=Array.isArray(settings.features)?settings.features:[];
- $("#view").innerHTML=`${pageHeader("STORE SETTINGS","Payment & Store.","Configure payments and manage the catalogue categories and reusable product features.")}
+ const categoryImages=settings.categoryImages||{};
+ $("#view").innerHTML=`${pageHeader("STORE SETTINGS","Payment & Store.","Configure payments and manage categories, category photos and reusable product features.")}
  <div class="section-card">
   <div class="notice">UPI / Google Pay uses your merchant UPI ID. Card payments require a real payment gateway and server-side verification.</div>
   <div class="form-grid" style="margin-top:18px">
    <div class="field full"><label>Store name</label><input id="sName" value="${esc(settings.storeName||"SZC Store")}"></div>
    <div class="field"><label>Merchant UPI ID</label><input id="sUpi" value="${esc(settings.upiId||"")}" placeholder="name@upi"></div>
    <div class="field"><label>UPI display name</label><input id="sUpiName" value="${esc(settings.upiName||"SZC Store")}"></div>
-   <div class="field full"><label>Payment verification endpoint (optional)</label><input id="sVerifyUrl" value="${esc(settings.paymentVerificationUrl||"")}" placeholder="Add your secure provider verification endpoint later"><small class="mini-note">Leave empty until you have a real merchant verification service. Do not put secret API keys in this field.</small></div>
+   <div class="field full"><label>Payment verification endpoint (optional)</label><input id="sVerifyUrl" value="${esc(settings.paymentVerificationUrl||"")}" placeholder="Add your secure provider verification endpoint later"><small class="mini-note">Never put secret API keys here.</small></div>
    <div class="field full"><div class="check-panel">
     <label><input id="sUpiEnabled" type="checkbox" ${settings.upiEnabled!==false?"checked":""}> Enable UPI / Google Pay</label>
     <label><input id="sGpay" type="checkbox" ${settings.gpayEnabled!==false?"checked":""}> Show Google Pay</label>
@@ -194,9 +219,9 @@ async function settingsView(){
  </div>
 
  <div class="section-card">
-  <div class="section-title"><div><h2>Categories</h2><p class="mini-note">These categories become available when creating or editing products.</p></div><button type="button" class="secondary" id="addCategory">+ Add category</button></div>
-  <div id="categoryList" class="catalog-list">${categories.map(c=>`<div class="catalog-row"><input class="catalog-category" value="${esc(c)}" placeholder="Category name"><button type="button" class="danger" data-remove-catalogue>Remove</button></div>`).join("")}</div>
-  <div class="form-actions"><button type="button" class="primary" id="saveCategories">Save categories</button></div>
+  <div class="section-title"><div><h2>Categories & photos</h2><p class="mini-note">Create categories and upload a category image directly from your device.</p></div><button type="button" class="secondary" id="addCategory">+ Add category</button></div>
+  <div id="categoryList" class="catalog-list">${categories.map(c=>`<div class="catalog-row category-editor"><div><input class="catalog-category" value="${esc(c)}" placeholder="Category name"><div class="category-upload"><input class="catalog-category-file" type="file" accept="image/*"><small class="mini-note">${categoryImages[c]?"Current photo saved. Choose a new file to replace it.":"No category photo yet."}</small></div></div><button type="button" class="danger" data-remove-catalogue>Remove</button></div>`).join("")}</div>
+  <div class="form-actions"><button type="button" class="primary" id="saveCategories">Save categories & photos</button></div>
  </div>
 
  <div class="section-card">
@@ -207,28 +232,35 @@ async function settingsView(){
 
  <div class="section-card">
   <div class="section-title"><h2>Per-product payment methods</h2><button class="secondary" data-action="products">Manage products</button></div>
-  <div class="table-wrap"><table class="data-table"><thead><tr><th>Product</th><th>Allowed methods</th><th>Action</th></tr></thead><tbody>
-  ${products.map(p=>`<tr><td>${esc(p.name)}</td><td>${(p.paymentOptions||["upi"]).map(x=>esc(x.toUpperCase())).join(" / ")}</td><td><button class="primary" data-action="edit-product" data-id="${esc(p.id)}">Edit product</button></td></tr>`).join("")||`<tr><td colspan="3"><div class="empty-state">No products yet.</div></td></tr>`}
-  </tbody></table></div>
+  <div class="table-wrap"><table class="data-table"><thead><tr><th>Product</th><th>Allowed methods</th><th>Action</th></tr></thead><tbody>${products.map(p=>`<tr><td>${esc(p.name)}</td><td>${(p.paymentOptions||["upi"]).map(x=>esc(x.toUpperCase())).join(" / ")}</td><td><button class="primary" data-action="edit-product" data-id="${esc(p.id)}">Edit product</button></td></tr>`).join("")||`<tr><td colspan="3"><div class="empty-state">No products yet.</div></td></tr>`}</tbody></table></div>
  </div>`;
 
- const row=(list,cls,placeholder)=>{
-  const r=document.createElement("div");r.className="catalog-row";
-  r.innerHTML=`<input class="${cls}" placeholder="${placeholder}"><button type="button" class="danger" data-remove-catalogue>Remove</button>`;
-  r.querySelector("[data-remove-catalogue]").onclick=()=>r.remove();
-  list.appendChild(r);
+ const addCategoryRow=()=>{
+  const r=document.createElement("div");r.className="catalog-row category-editor";
+  r.innerHTML=`<div><input class="catalog-category" placeholder="Category name"><div class="category-upload"><input class="catalog-category-file" type="file" accept="image/*"><small class="mini-note">Choose a category photo.</small></div></div><button type="button" class="danger" data-remove-catalogue>Remove</button>`;
+  r.querySelector("[data-remove-catalogue]").onclick=()=>r.remove();$("#categoryList").appendChild(r);
  };
- $("#addCategory").onclick=()=>row($("#categoryList"),"catalog-category","Category name");
- $("#addFeature").onclick=()=>row($("#featureList"),"catalog-feature","Feature name");
+ $("#addCategory").onclick=addCategoryRow;
  document.querySelectorAll("[data-remove-catalogue]").forEach(b=>b.onclick=()=>b.closest(".catalog-row").remove());
 
  $("#saveCategories").onclick=async()=>{
-  const values=[...document.querySelectorAll(".catalog-category")].map(x=>x.value.trim()).filter(Boolean);
-  try{await setDoc(doc(db,"settings","store"),{categories:[...new Set(values)],updatedAt:serverTimestamp()},{merge:true});await reloadAndStay();toast("Categories saved")}catch(e){toast(e.message||"Could not save categories")}
+  const rows=[...document.querySelectorAll("#categoryList .category-editor")], nextImages={...categoryImages}, values=[];
+  try{
+   for(const row of rows){
+    const name=row.querySelector(".catalog-category").value.trim();if(!name)continue;values.push(name);
+    const file=row.querySelector(".catalog-category-file")?.files?.[0];
+    if(file){toast(`Uploading ${name} photo…`);nextImages[name]=await uploadAdminImage(file,"categories")}
+   }
+   const unique=[...new Set(values)];Object.keys(nextImages).forEach(k=>{if(!unique.includes(k))delete nextImages[k]});
+   await setDoc(doc(db,"settings","store"),{categories:unique,categoryImages:nextImages,updatedAt:serverTimestamp()},{merge:true});
+   await reloadAndStay();toast("Categories and photos saved");
+  }catch(e){console.error(e);toast(e.message||"Could not save categories")}
  };
+
  $("#saveFeatures").onclick=async()=>{
   const values=[...document.querySelectorAll(".catalog-feature")].map(x=>x.value.trim()).filter(Boolean);
-  try{await setDoc(doc(db,"settings","store"),{features:[...new Set(values)],updatedAt:serverTimestamp()},{merge:true});await reloadAndStay();toast("Features saved")}catch(e){toast(e.message||"Could not save features")}
+  try{await setDoc(doc(db,"settings","store"),{features:[...new Set(values)],updatedAt:serverTimestamp()},{merge:true});await reloadAndStay();toast("Features saved")}
+  catch(e){toast(e.message||"Could not save features")}
  };
 }
 async function saveSettings(){try{await setDoc(doc(db,"settings","store"),{storeName:$("#sName").value.trim(),upiId:$("#sUpi").value.trim(),upiName:$("#sUpiName").value.trim(),paymentVerificationUrl:$("#sVerifyUrl").value.trim(),upiEnabled:$("#sUpiEnabled").checked,gpayEnabled:$("#sGpay").checked,cardEnabled:$("#sCard").checked,updatedAt:serverTimestamp()},{merge:true});await reloadAndStay();toast("Payment settings saved")}catch(e){toast(e.message||"Could not save settings")}}
