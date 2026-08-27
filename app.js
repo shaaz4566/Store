@@ -146,7 +146,7 @@ async function getSavedAddresses(){
   return list.sort((a,b)=>Number(b.isDefault)-Number(a.isDefault));
  }catch(e){
   console.error("Address load failed:",e);
-  toast("Could not load saved addresses");
+  toast("Could not load saved addresses: "+(e.code||"check Firestore rules"));
   return [];
  }
 }
@@ -204,7 +204,7 @@ async function setDefaultAddress(id){
  toast("Default address updated");
 }
 
-function addressForm(existing={}){
+function addressForm(existing={},returnToCheckout=false){
  openDrawer(`<div class="account-box">
   <p class="eyebrow">DELIVERY ADDRESS</p>
   <h2>${existing.id?"Edit address.":"Add address."}</h2>
@@ -218,9 +218,11 @@ function addressForm(existing={}){
    <input id="astate" placeholder="State" value="${escapeHtml(existing.state||"Kerala")}">
    <input id="apincode" inputmode="numeric" placeholder="PIN code" value="${escapeHtml(existing.pincode||"")}">
    <label class="check-row"><input id="adefault" type="checkbox" ${existing.isDefault||!existing.id?"checked":""}> Make this my default address</label>
-   <button class="btn btn-dark" id="saveAddress">${existing.id?"Save changes":"Save address"}</button>
+   <button type="button" class="btn btn-dark" id="saveAddress">${existing.id?"Save changes":"Save address"}</button><button type="button" class="btn" id="cancelAddress">Cancel</button>
   </div>
  </div>`);
+
+ $("#cancelAddress").onclick=()=>returnToCheckout?checkout():address();
 
  $("#saveAddress").onclick=async()=>{
   const data={
@@ -238,20 +240,32 @@ function addressForm(existing={}){
   const ref=existing.id
    ? doc(db,"users",currentUser.uid,"addresses",existing.id)
    : doc(collection(db,"users",currentUser.uid,"addresses"));
-  if($("#adefault").checked){
-   await setDefaultAddress(existing.id||"__new__").catch(()=>{});
+  const makeDefault=$("#adefault").checked;
+  try{
+   await setDoc(ref,{
+    ...data,
+    isDefault:makeDefault,
+    createdAt:existing.createdAt||serverTimestamp()
+   },{merge:true});
+
+   const saved=await getSavedAddresses();
+   if(makeDefault){
+    await Promise.all(saved.filter(a=>a.id!==ref.id).map(a=>setDoc(
+     doc(db,"users",currentUser.uid,"addresses",a.id),
+     {isDefault:false,updatedAt:serverTimestamp()},
+     {merge:true}
+    )));
+   }else if(saved.length===1){
+    await setDoc(ref,{isDefault:true,updatedAt:serverTimestamp()},{merge:true});
+   }
+
+   toast("Address saved");
+   if(returnToCheckout) await checkout();
+   else address();
+  }catch(e){
+   console.error("Address save failed:",e);
+   toast("Could not save address: "+(e.code||e.message||"permission error"));
   }
-  await setDoc(ref,{...data,isDefault:$("#adefault").checked,createdAt:existing.createdAt||serverTimestamp()},{merge:true});
-  const saved=await getSavedAddresses();
-  if($("#adefault").checked){
-   await Promise.all(saved.filter(a=>a.id!==ref.id).map(a=>setDoc(
-    doc(db,"users",currentUser.uid,"addresses",a.id),{isDefault:false,updatedAt:serverTimestamp()},{merge:true}
-   )));
-  } else if(saved.length===0){
-   await setDoc(ref,{isDefault:true},{merge:true});
-  }
-  toast("Address saved");
-  address();
  };
 }
 
@@ -350,7 +364,7 @@ async function checkout(){
  </div>`);
 
  if(!addresses.length){
-  $("#addCheckoutAddress").onclick=()=>addressForm();
+  $("#addCheckoutAddress").onclick=()=>addressForm({},true);
   return;
  }
  const updatePreview=()=>{
