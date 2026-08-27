@@ -149,7 +149,7 @@ function productFields(p={}){
   </div>
   <div class="field"><label>Price (₹)</label><input id="pPrice" type="number" min="0" value="${p.price??""}"></div>
   <div class="field"><label>Stock</label><input id="pStock" type="number" min="0" value="${p.stock??0}"></div>
-  <div class="field full"><label>Product photo</label><input id="pImageFile" type="file" accept="image/*"><small class="mini-note">Choose a photo from your device. It will be uploaded to Firebase Storage and saved to Firestore.</small><input id="pImage" value="${esc(p.image)}" placeholder="Or paste an image URL"></div>
+  <div class="field full"><label>Product photo</label><input id="pImageFile" type="file" accept="image/*"><small class="mini-note">Choose a photo from your device. It will be uploaded to Firebase Storage and included when you generate index.html.</small><input id="pImage" value="${esc(p.image)}" placeholder="Or paste an image URL"></div>
   <div class="field"><label>Badge</label><input id="pBadge" value="${esc(p.badge)}" placeholder="NEW / SALE"></div>
   <div class="field"><label>Product type</label><select id="pFeatured"><option value="false" ${!p.featured?"selected":""}>Standard</option><option value="true" ${p.featured?"selected":""}>Featured</option></select></div>
   <div class="field full"><label>Product features</label>
@@ -198,6 +198,57 @@ async function customersView(){
  try{const snap=await getDocs(collection(db,"users"));const users=await Promise.all(snap.docs.map(async d=>{const as=await getDocs(collection(db,"users",d.id,"addresses")).catch(()=>({docs:[]}));return{id:d.id,...d.data(),addresses:as.docs.map(x=>({id:x.id,...x.data()})),orders:orders.filter(o=>o.userId===d.id)}}));$("#view").innerHTML=`${pageHeader("CUSTOMERS","Customers.","Customer accounts, order history and every saved delivery address.")}<div class="section-card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Customer</th><th>Email</th><th>Orders</th><th>Saved addresses</th></tr></thead><tbody>${users.map(u=>`<tr><td><strong>${esc(u.displayName||"Customer")}</strong><div class="product-meta">UID ${esc(u.id)}</div></td><td>${esc(u.email||"—")}</td><td>${u.orders.length}</td><td><div class="address-list">${u.addresses.map(a=>`<div class="address-row"><strong>${esc(a.label||"Address")}</strong> ${a.isDefault?`<span class="status green">Default</span>`:""}<div class="mini-note">${esc([a.name,a.line1,a.line2,a.city,a.district,a.state,a.pincode].filter(Boolean).join(", "))}</div></div>`).join("")||`<span class="mini-note">No saved addresses.</span>`}</div></td></tr>`).join("")||`<tr><td colspan="4"><div class="empty-state">No customers yet.</div></td></tr>`}</tbody></table></div></div>`}catch(e){console.error(e);toast("Could not load customers")}
 }
 
+function downloadTextFile(filename,text){
+ const blob=new Blob([text],{type:"text/html;charset=utf-8"});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+async function exportStoreIndex(){
+ try{
+  toast("Preparing updated index.html…");
+  const snap=await getDocs(query(collection(db,"products"),where("published","==",true)));
+  const exportedProducts=snap.docs.map(d=>({id:d.id,...d.data()}));
+
+  const exportedSettings={
+   storeName:settings.storeName||"SZC Store",
+   categories:Array.isArray(settings.categories)?settings.categories:[],
+   categoryImages:settings.categoryImages||{},
+   features:Array.isArray(settings.features)?settings.features:[],
+   upiEnabled:settings.upiEnabled!==false,
+   gpayEnabled:settings.gpayEnabled!==false,
+   cardEnabled:!!settings.cardEnabled,
+   upiId:settings.upiId||"",
+   upiName:settings.upiName||"SZC Store"
+  };
+
+  // The generated file is self-contained as far as catalogue data is concerned.
+  // It keeps Firebase code in the normal app and embeds a catalogue snapshot
+  // so product/category images are present in the exported HTML.
+  const indexPath="${root.name}";
+  const existing=await fetch("index.html",{cache:"no-store"}).then(r=>r.ok?r.text():"").catch(()=> "");
+  if(!existing)throw new Error("Open the admin page from the same GitHub folder as index.html before exporting.");
+
+  const markerStart="<!-- SZC_CATALOGUE_START -->";
+  const markerEnd="<!-- SZC_CATALOGUE_END -->";
+  const payload=`${markerStart}
+<script id="szc-catalogue-data" type="application/json">${JSON.stringify({products:exportedProducts,settings:exportedSettings}).replace(/</g,"\\u003c")}</script>
+${markerEnd}`;
+
+  let output=existing;
+  const re=new RegExp(`${markerStart.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\$&")}[\\s\\S]*?${markerEnd.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\$&")}`);
+  if(re.test(output)) output=output.replace(re,payload);
+  else output=output.replace(/<body([^>]*)>/i,`<body$1>\n${payload}`);
+
+  downloadTextFile("index.html",output);
+  toast(`Generated ${exportedProducts.length} published product(s)`);
+ }catch(e){
+  console.error(e);
+  toast(e.message||"Could not generate index.html");
+ }
+}
+
 async function settingsView(){
  const categories=Array.isArray(settings.categories)?settings.categories:[];
  const features=Array.isArray(settings.features)?settings.features:[];
@@ -216,7 +267,7 @@ async function settingsView(){
     <label><input id="sCard" type="checkbox" ${settings.cardEnabled?"checked":""}> Enable Card</label>
    </div></div>
   </div>
-  <div class="form-actions"><button class="primary" data-action="save-settings">Save payment settings</button></div>
+  <div class="form-actions"><button class="primary" data-action="save-settings">Save payment settings</button></div><div class="form-actions"><button class="secondary" id="exportStore">Generate updated index.html</button></div>
  </div>
 
  <div class="section-card">
@@ -258,7 +309,7 @@ async function settingsView(){
   }catch(e){console.error(e);toast(e.message||"Could not save categories")}
  };
 
- 
+ $("#exportStore").onclick=exportStoreIndex;
 
  $("#saveFeatures").onclick=async()=>{
   const values=[...document.querySelectorAll(".catalog-feature")].map(x=>x.value.trim()).filter(Boolean);
